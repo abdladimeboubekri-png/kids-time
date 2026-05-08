@@ -19,22 +19,43 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-
-      - name: Generate Gradle wrapper
+      - name: Generate Gradle wrapper (locked to 8.7)
         run: |
-          if [ ! -f gradlew ]; then
-            gradle wrapper --gradle-version 8.2
-          fi
-          chmod +x gradlew
+          # Install a specific Gradle version locally to generate the wrapper
+          wget -q https://services.gradle.org/distributions/gradle-8.7-bin.zip
+          unzip -q gradle-8.7-bin.zip
+          export PATH=$PWD/gradle-8.7/bin:$PATH
+          gradle wrapper --gradle-version 8.7
+          chmod +x ./gradlew
+          ./gradlew --version
+
+      - name: Show project structure (debug)
+        run: |
+          echo "=== Root files ==="
+          ls -la
+          echo "=== App folder ==="
+          ls -la app/ || echo "app/ missing!"
+          echo "=== Sources ==="
+          find app/src -type f | head -50
 
       - name: Build debug APK
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: KidTime-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload build reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports
+          path: |
+            app/build/reports/
+            **/*.log
+          if-no-files-found: ignore
