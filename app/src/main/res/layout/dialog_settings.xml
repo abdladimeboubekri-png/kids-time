@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Kid 1" android:textStyle="bold" android:textSize="14sp"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <EditText android:id="@+id/name1" android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="wrap_content" android:hint="Name"/>
+        <EditText android:id="@+id/pin1" android:layout_width="100dp" android:inputType="numberPassword"
+            android:layout_height="wrap_content" android:hint="PIN" android:maxLength="4"/>
+    </LinearLayout>
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Kid 2" android:textStyle="bold" android:layout_marginTop="14dp" android:textSize="14sp"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <EditText android:id="@+id/name2" android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="wrap_content" android:hint="Name"/>
+        <EditText android:id="@+id/pin2" android:layout_width="100dp" android:inputType="numberPassword"
+            android:layout_height="wrap_content" android:hint="PIN" android:maxLength="4"/>
+    </LinearLayout>
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Kid 3" android:textStyle="bold" android:layout_marginTop="14dp" android:textSize="14sp"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <EditText android:id="@+id/name3" android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="wrap_content" android:hint="Name"/>
+        <EditText android:id="@+id/pin3" android:layout_width="100dp" android:inputType="numberPassword"
+            android:layout_height="wrap_content" android:hint="PIN" android:maxLength="4"/>
+    </LinearLayout>
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Daily limit (hours)" android:textStyle="bold"
+        android:layout_marginTop="20dp" android:textSize="14sp"/>
+    <EditText android:id="@+id/limitHrs"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:inputType="numberDecimal" android:hint="3"/>
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Admin PIN" android:textStyle="bold"
+        android:layout_marginTop="14dp" android:textSize="14sp"/>
+    <EditText android:id="@+id/adminPin"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:inputType="numberPassword" android:maxLength="4" android:hint="1234"/>
+</LinearLayout>
+</ScrollView>
