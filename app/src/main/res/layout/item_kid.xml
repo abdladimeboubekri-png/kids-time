@@ -2,35 +2,56 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:padding="12dp"
+    android:orientation="vertical"
+    android:padding="14dp"
     android:layout_marginBottom="6dp"
-    android:background="#161929"
-    android:gravity="center_vertical">
-
-    <TextView android:id="@+id/kidEmoji"
-        android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:textSize="32sp" android:layout_marginRight="14dp"/>
+    android:background="#161929">
 
     <LinearLayout
-        android:layout_width="0dp" android:layout_height="wrap_content"
-        android:layout_weight="1" android:orientation="vertical">
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
-        <TextView android:id="@+id/kidName"
+        <TextView android:id="@+id/kidEmoji"
             android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:textColor="#FFFFFF" android:textSize="18sp" android:textStyle="bold"/>
+            android:textSize="32sp" android:layout_marginRight="14dp"/>
 
-        <TextView android:id="@+id/kidTime"
-            android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:textColor="#7a82a8" android:textSize="14sp"/>
+        <LinearLayout
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:orientation="vertical">
 
-        <ProgressBar android:id="@+id/kidProgress"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="match_parent" android:layout_height="6dp"
-            android:layout_marginTop="4dp" android:max="100"/>
+            <TextView android:id="@+id/kidName"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="#FFFFFF" android:textSize="18sp" android:textStyle="bold"/>
+
+            <TextView android:id="@+id/kidTime"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="#7a82a8" android:textSize="14sp"/>
+
+            <ProgressBar android:id="@+id/kidProgress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent" android:layout_height="6dp"
+                android:layout_marginTop="4dp" android:max="100"/>
+        </LinearLayout>
     </LinearLayout>
 
-    <Button android:id="@+id/kidReset"
-        android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:text="Reset"/>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp">
+
+        <Button android:id="@+id/kidEdit"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Edit" android:layout_marginRight="6dp"/>
+
+        <Button android:id="@+id/kidReset"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Reset Time" android:layout_marginRight="6dp"/>
+
+        <Button android:id="@+id/kidDelete"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Delete"/>
+    </LinearLayout>
 </LinearLayout>
