@@ -52,41 +52,32 @@ class MonitorService : Service() {
         val isOurApp = (fg == packageName)
         val blocked = storage.getBlockedPackages()
         val isBlocked = blocked.contains(fg)
-
-        // Track app switches: if the user changed the foreground app, treat it like a fresh entry
         val appChanged = (lastForegroundPackage != null && lastForegroundPackage != fg)
 
-        // CASE 1: Inside our own KidTime app (lock screen, admin, etc.)
         if (isOurApp) {
-            // Don't consume time, don't show another lock
             lockShowing = false
             lastForegroundPackage = fg
             return
         }
 
-        // CASE 2: A blocked app is in foreground
         if (isBlocked) {
             val activeKid = storage.getActiveKid()
-
-            // If the blocked app just appeared (app switch from somewhere else)
-            // OR no kid is logged in: require fresh PIN
             if (activeKid < 0 || appChanged) {
-                // Clear active kid so the lock screen will properly require re-PIN
                 storage.setActiveKid(-1)
                 showLock(fg)
                 lastForegroundPackage = fg
                 return
             }
 
-            // Otherwise, kid is logged in and inside the blocked app - count their time
+            // Count time only for the active kid
             val secElapsed = (deltaMs / 1000).coerceAtLeast(0)
             if (secElapsed > 0) {
                 storage.addUsedSeconds(activeKid, secElapsed)
             }
 
-            // Check if they ran out
+            // Check kid's individual limit
             val kid = storage.getKids().find { it.id == activeKid }
-            if (kid != null && kid.usedSec >= storage.getDailyLimitSec()) {
+            if (kid != null && kid.usedSec >= kid.dailyLimitSec) {
                 storage.setActiveKid(-1)
                 showLock(fg)
             }
@@ -94,10 +85,7 @@ class MonitorService : Service() {
             return
         }
 
-        // CASE 3: Foreground is not our app and not a blocked app
-        // (home screen, launcher, settings, allowed apps, etc.)
-        // -> DO NOT count time, and CLEAR the active kid so they have to re-PIN
-        //    next time they open a blocked app.
+        // Not our app, not blocked: home, allowed apps, settings
         if (storage.getActiveKid() >= 0) {
             storage.setActiveKid(-1)
         }
