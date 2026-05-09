@@ -4,189 +4,211 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="#0d0f1a"
-    android:padding="40dp"
-    android:gravity="center">
+    android:padding="32dp">
 
-    <TextView
-        android:id="@+id/title"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="📺 KidTime — Enter PIN"
-        android:textColor="#FFFFFF"
-        android:textSize="32sp"
-        android:textStyle="bold" />
-
-    <TextView
-        android:id="@+id/status"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="8dp"
-        android:text="Pick your name"
-        android:textColor="#7a82a8"
-        android:textSize="16sp" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="⬆️⬇️ to choose row · ⬅️ ⏺ ➡️ to pick number"
-        android:textColor="#4d96ff"
-        android:textSize="13sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="20dp"/>
-
-    <!-- Kid selector -->
+    <!-- Top header strip -->
     <LinearLayout
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginBottom="20dp">
-
-        <Button
-            android:id="@+id/kid1"
-            android:layout_width="160dp"
-            android:layout_height="90dp"
-            android:layout_margin="6dp"
-            android:background="@drawable/btn_kid"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/kid2"
-            android:layout_width="160dp"
-            android:layout_height="90dp"
-            android:layout_margin="6dp"
-            android:background="@drawable/btn_kid"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/kid3"
-            android:layout_width="160dp"
-            android:layout_height="90dp"
-            android:layout_margin="6dp"
-            android:background="@drawable/btn_kid"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-    </LinearLayout>
-
-    <!-- PIN dots -->
-    <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:gravity="center_vertical"
         android:layout_marginBottom="16dp">
 
-        <TextView android:id="@+id/dot1" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="○" android:textColor="#4d96ff" android:textSize="42sp" android:layout_margin="6dp"/>
-        <TextView android:id="@+id/dot2" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="○" android:textColor="#4d96ff" android:textSize="42sp" android:layout_margin="6dp"/>
-        <TextView android:id="@+id/dot3" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="○" android:textColor="#4d96ff" android:textSize="42sp" android:layout_margin="6dp"/>
-        <TextView android:id="@+id/dot4" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="○" android:textColor="#4d96ff" android:textSize="42sp" android:layout_margin="6dp"/>
+        <TextView
+            android:id="@+id/title"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="📺 KidTime"
+            android:textColor="#FFFFFF"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Pick your name"
+            android:textColor="#7a82a8"
+            android:textSize="16sp" />
     </LinearLayout>
 
-    <!-- Row-based numpad -->
+    <!-- Main content: 2 columns -->
     <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        android:gravity="center">
 
-        <!-- Row 0: 1 2 3 -->
+        <!-- LEFT: numpad with row selection -->
         <LinearLayout
-            android:id="@+id/row0"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:padding="6dp"
-            android:layout_margin="4dp"
-            android:background="@drawable/row_normal">
-            <TextView android:id="@+id/r0c0" android:layout_width="80dp" android:layout_height="70dp"
-                android:gravity="center" android:textSize="26sp" android:textStyle="bold"
-                android:textColor="#FFFFFF" android:layout_margin="4dp"
-                android:background="@drawable/cell_normal"/>
-            <TextView android:id="@+id/r0c1" android:layout_width="80dp" android:layout_height="70dp"
-                android:gravity="center" android:textSize="26sp" android:textStyle="bold"
-                android:textColor="#FFFFFF" android:layout_margin="4dp"
-                android:background="@drawable/cell_normal"/>
-            <TextView android:id="@+id/r0c2" android:layout_width="80dp" android:layout_height="70dp"
-                android:gravity="center" android:textSize="26sp" android:textStyle="bold"
-                android:textColor="#FFFFFF" android:layout_margin="4dp"
-                android:background="@drawable/cell_normal"/>
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⬆️⬇️ choose row · ⬅️ ⏺ ➡️ pick number"
+                android:textColor="#4d96ff"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="16dp"/>
+
+            <!-- Row 0: 1 2 3 -->
+            <LinearLayout
+                android:id="@+id/row0"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="6dp"
+                android:layout_marginBottom="6dp"
+                android:background="@drawable/row_normal">
+                <TextView android:id="@+id/r0c0" android:layout_width="78dp" android:layout_height="64dp"
+                    android:gravity="center" android:textSize="24sp" android:textStyle="bold"
+                    android:textColor="#FFFFFF" android:layout_margin="4dp"
+                    android:background="@drawable/cell_normal"/>
+                <TextView android:id="@+id/r0c1" android:layout_width="78dp" android:layout_height="64dp"
+                    android:gravity="center" android:textSize="24sp" android:textStyle="bold"
+                    android:textColor="#FFFFFF" android:layout_margin="4dp"
+                    android:background="@drawable/cell_normal"/>
+                <TextView android:id="@+id/r0c2" android:layout_width="78dp" android:layout_height="64dp"
+                    android:gravity="center" android:textSize="24sp" android:textStyle="bold"
+                    android:textColor="#FFFFFF" android:layout_margin="4dp"
+                    android:background="@drawable/cell_normal"/>
+            </LinearLayout>
+
+            <!-- Row 1: 4 5 6 -->
+            <LinearLayout
+                android:id="@+id/row1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="6dp"
+                android:layout_marginBottom="6dp"
+                android:background="@drawable/row_normal">
+                <TextView android:id="@+id/r1c0" android:layout_width="78dp" android:layout_height="64dp"
+                    android:gravity="center" android:textSize="24sp" android:textStyle="bold"
+                    android:textColor="#FFFFFF" android:layout_margin="4dp"
+                    android:background="@drawable/cell_normal"/>
+                <TextView android:id="@+id/r1c1" android:layout_width="78dp" android:layout_height="64dp"
+                    android:gravity="center" android:textSize="24sp" android:textStyle="bold"
+                    android:textColor="#FFFFFF" android:layout_margin="4dp"
+                    android:background="@drawable/cell_normal"/>
+                <TextView android:id="@+id/r1c2" android:layout_width="78dp" android:layout_height="64dp"
+                    android:gravity="center" android:textSize="24sp" android:textStyle="bold"
+                    android:textColor="#FFFFFF" android:layout_margin="4dp"
+                    android:background="@drawable/cell_normal"/>
+            </LinearLayout>
+
+            <!-- Row 2: 7 8 9 -->
+            <LinearLayout
+                android:id="@+id/row2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="6dp"
+                android:layout_marginBottom="6dp"
+                android:background="@drawable/row_normal">
+                <TextView android:id="@+id/r2c0" android:layout_width="78dp" android:layout_height="64dp"
+                    android:gravity="center" android:textSize="24sp" android:textStyle="bold"
+                    android:textColor="#FFFFFF" android:layout_margin="4dp"
+                    android:background="@drawable/cell_normal"/>
+                <TextView android:id="@+id/r2c1" android:layout_width="78dp" android:layout_height="64dp"
+                    android:gravity="center" android:textSize="24sp" android:textStyle="bold"
+                    android:textColor="#FFFFFF" android:layout_margin="4dp"
+                    android:background="@drawable/cell_normal"/>
+                <TextView android:id="@+id/r2c2" android:layout_width="78dp" android:layout_height="64dp"
+                    android:gravity="center" android:textSize="24sp" android:textStyle="bold"
+                    android:textColor="#FFFFFF" android:layout_margin="4dp"
+                    android:background="@drawable/cell_normal"/>
+            </LinearLayout>
+
+            <!-- Row 3: DEL 0 OK -->
+            <LinearLayout
+                android:id="@+id/row3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="6dp"
+                android:background="@drawable/row_normal">
+                <TextView android:id="@+id/r3c0" android:layout_width="78dp" android:layout_height="64dp"
+                    android:gravity="center" android:textSize="24sp" android:textStyle="bold"
+                    android:textColor="#ff6b6b" android:layout_margin="4dp"
+                    android:background="@drawable/cell_normal"/>
+                <TextView android:id="@+id/r3c1" android:layout_width="78dp" android:layout_height="64dp"
+                    android:gravity="center" android:textSize="24sp" android:textStyle="bold"
+                    android:textColor="#FFFFFF" android:layout_margin="4dp"
+                    android:background="@drawable/cell_normal"/>
+                <TextView android:id="@+id/r3c2" android:layout_width="78dp" android:layout_height="64dp"
+                    android:gravity="center" android:textSize="24sp" android:textStyle="bold"
+                    android:textColor="#6bcb77" android:layout_margin="4dp"
+                    android:background="@drawable/cell_normal"/>
+            </LinearLayout>
+
         </LinearLayout>
 
-        <!-- Row 1: 4 5 6 -->
-        <LinearLayout
-            android:id="@+id/row1"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:padding="6dp"
-            android:layout_margin="4dp"
-            android:background="@drawable/row_normal">
-            <TextView android:id="@+id/r1c0" android:layout_width="80dp" android:layout_height="70dp"
-                android:gravity="center" android:textSize="26sp" android:textStyle="bold"
-                android:textColor="#FFFFFF" android:layout_margin="4dp"
-                android:background="@drawable/cell_normal"/>
-            <TextView android:id="@+id/r1c1" android:layout_width="80dp" android:layout_height="70dp"
-                android:gravity="center" android:textSize="26sp" android:textStyle="bold"
-                android:textColor="#FFFFFF" android:layout_margin="4dp"
-                android:background="@drawable/cell_normal"/>
-            <TextView android:id="@+id/r1c2" android:layout_width="80dp" android:layout_height="70dp"
-                android:gravity="center" android:textSize="26sp" android:textStyle="bold"
-                android:textColor="#FFFFFF" android:layout_margin="4dp"
-                android:background="@drawable/cell_normal"/>
-        </LinearLayout>
+        <!-- Vertical divider -->
+        <View
+            android:layout_width="1dp"
+            android:layout_height="match_parent"
+            android:background="#1e2235"
+            android:layout_marginHorizontal="20dp"/>
 
-        <!-- Row 2: 7 8 9 -->
-        <LinearLayout
-            android:id="@+id/row2"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:padding="6dp"
-            android:layout_margin="4dp"
-            android:background="@drawable/row_normal">
-            <TextView android:id="@+id/r2c0" android:layout_width="80dp" android:layout_height="70dp"
-                android:gravity="center" android:textSize="26sp" android:textStyle="bold"
-                android:textColor="#FFFFFF" android:layout_margin="4dp"
-                android:background="@drawable/cell_normal"/>
-            <TextView android:id="@+id/r2c1" android:layout_width="80dp" android:layout_height="70dp"
-                android:gravity="center" android:textSize="26sp" android:textStyle="bold"
-                android:textColor="#FFFFFF" android:layout_margin="4dp"
-                android:background="@drawable/cell_normal"/>
-            <TextView android:id="@+id/r2c2" android:layout_width="80dp" android:layout_height="70dp"
-                android:gravity="center" android:textSize="26sp" android:textStyle="bold"
-                android:textColor="#FFFFFF" android:layout_margin="4dp"
-                android:background="@drawable/cell_normal"/>
-        </LinearLayout>
+        <!-- RIGHT: kids selector + PIN dots -->
+        <ScrollView
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="match_parent"
+            android:scrollbars="none">
 
-        <!-- Row 3: DEL 0 OK -->
-        <LinearLayout
-            android:id="@+id/row3"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:padding="6dp"
-            android:layout_margin="4dp"
-            android:background="@drawable/row_normal">
-            <TextView android:id="@+id/r3c0" android:layout_width="80dp" android:layout_height="70dp"
-                android:gravity="center" android:textSize="26sp" android:textStyle="bold"
-                android:textColor="#ff6b6b" android:layout_margin="4dp"
-                android:background="@drawable/cell_normal"/>
-            <TextView android:id="@+id/r3c1" android:layout_width="80dp" android:layout_height="70dp"
-                android:gravity="center" android:textSize="26sp" android:textStyle="bold"
-                android:textColor="#FFFFFF" android:layout_margin="4dp"
-                android:background="@drawable/cell_normal"/>
-            <TextView android:id="@+id/r3c2" android:layout_width="80dp" android:layout_height="70dp"
-                android:gravity="center" android:textSize="26sp" android:textStyle="bold"
-                android:textColor="#6bcb77" android:layout_margin="4dp"
-                android:background="@drawable/cell_normal"/>
-        </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center_horizontal"
+                android:paddingHorizontal="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="WHO IS WATCHING?"
+                    android:textColor="#7a82a8"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.15"
+                    android:layout_marginBottom="12dp"/>
+
+                <!-- Kids container - dynamically populated -->
+                <LinearLayout
+                    android:id="@+id/kidsContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"/>
+
+                <!-- PIN dots -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="20dp">
+
+                    <TextView android:id="@+id/dot1" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="○" android:textColor="#4d96ff" android:textSize="36sp" android:layout_margin="6dp"/>
+                    <TextView android:id="@+id/dot2" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="○" android:textColor="#4d96ff" android:textSize="36sp" android:layout_margin="6dp"/>
+                    <TextView android:id="@+id/dot3" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="○" android:textColor="#4d96ff" android:textSize="36sp" android:layout_margin="6dp"/>
+                    <TextView android:id="@+id/dot4" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="○" android:textColor="#4d96ff" android:textSize="36sp" android:layout_margin="6dp"/>
+                </LinearLayout>
+
+            </LinearLayout>
+        </ScrollView>
+
     </LinearLayout>
-
 </LinearLayout>
