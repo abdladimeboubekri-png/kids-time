@@ -249,6 +249,10 @@ class LockActivity : AppCompatActivity() {
                 updateDots()
                 return
             }
+            // Initialize session: record start time and current used-sec
+            // so MonitorService can compute time accurately via UsageStats.
+            storage.setSessionStartMs(System.currentTimeMillis())
+            storage.setSessionStartUsedSec(kid.usedSec)
             storage.setActiveKid(kid.id)
             storage.setLockGraceUntil(System.currentTimeMillis() + 8_000L)
             Toast.makeText(this, "Welcome ${kid.emoji} ${kid.name}!", Toast.LENGTH_SHORT).show()
@@ -271,6 +275,8 @@ class LockActivity : AppCompatActivity() {
 
     private fun goHome() {
         storage.setActiveKid(-1)
+        storage.setSessionStartMs(0L)
+        storage.setSessionStartUsedSec(0L)
         val home = Intent(Intent.ACTION_MAIN).apply {
             addCategory(Intent.CATEGORY_HOME)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
