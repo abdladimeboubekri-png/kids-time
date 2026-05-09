@@ -62,6 +62,18 @@ class MonitorService : Service() {
         storage = Storage(this)
         usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         startForeground(NOTIF_ID, buildNotification("starting"))
+
+        // SECURITY: if the saved session is "stale" (older than 6 hours),
+        // it almost certainly means the device was rebooted while a kid was
+        // logged in. Clear the session to force re-PIN, but PRESERVE the
+        // kid's accumulated usedSec — they don't get free time from rebooting.
+        val sessionStart = storage.getSessionStartMs()
+        val now = System.currentTimeMillis()
+        if (sessionStart > 0 && (now - sessionStart) > 6 * 60 * 60 * 1000L) {
+            android.util.Log.d(TAG, "Stale session detected (${(now - sessionStart) / 1000}s old) - clearing")
+            storage.handleBootOrServiceRestart()
+        }
+
         if (storage.isDebugOverlayEnabled()) {
             DebugOverlay.attach(this)
             DebugOverlay.update("KidTime: started")
