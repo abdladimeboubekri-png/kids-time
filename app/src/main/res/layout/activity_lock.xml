@@ -12,7 +12,7 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:layout_marginBottom="16dp">
+        android:layout_marginBottom="8dp">
 
         <TextView
             android:id="@+id/title"
@@ -33,6 +33,16 @@
             android:textSize="16sp" />
     </LinearLayout>
 
+    <TextView
+        android:id="@+id/hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textColor="#4d96ff"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="12dp"/>
+
     <!-- Main content: 2 columns -->
     <LinearLayout
         android:layout_width="match_parent"
@@ -41,22 +51,13 @@
         android:orientation="horizontal"
         android:gravity="center">
 
-        <!-- LEFT: numpad with row selection -->
+        <!-- LEFT: numpad -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="match_parent"
             android:orientation="vertical"
             android:gravity="center">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="⬆️⬇️ choose row · ⬅️ ⏺ ➡️ pick number"
-                android:textColor="#4d96ff"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="16dp"/>
 
             <!-- Row 0: 1 2 3 -->
             <LinearLayout
@@ -127,7 +128,7 @@
                     android:background="@drawable/cell_normal"/>
             </LinearLayout>
 
-            <!-- Row 3: DEL 0 OK -->
+            <!-- Row 3: DEL 0 BACK -->
             <LinearLayout
                 android:id="@+id/row3"
                 android:layout_width="wrap_content"
@@ -144,8 +145,8 @@
                     android:textColor="#FFFFFF" android:layout_margin="4dp"
                     android:background="@drawable/cell_normal"/>
                 <TextView android:id="@+id/r3c2" android:layout_width="78dp" android:layout_height="64dp"
-                    android:gravity="center" android:textSize="24sp" android:textStyle="bold"
-                    android:textColor="#6bcb77" android:layout_margin="4dp"
+                    android:gravity="center" android:textSize="22sp" android:textStyle="bold"
+                    android:textColor="#ffd93d" android:layout_margin="4dp"
                     android:background="@drawable/cell_normal"/>
             </LinearLayout>
 
@@ -158,57 +159,57 @@
             android:background="#1e2235"
             android:layout_marginHorizontal="20dp"/>
 
-        <!-- RIGHT: kids selector + PIN dots -->
-        <ScrollView
+        <!-- RIGHT: kids list + PIN dots -->
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="match_parent"
-            android:scrollbars="none">
+            android:orientation="vertical"
+            android:gravity="center_horizontal">
 
-            <LinearLayout
-                android:layout_width="match_parent"
+            <TextView
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center_horizontal"
-                android:paddingHorizontal="16dp">
+                android:text="WHO IS WATCHING?"
+                android:textColor="#7a82a8"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.15"
+                android:layout_marginBottom="12dp"/>
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="WHO IS WATCHING?"
-                    android:textColor="#7a82a8"
-                    android:textSize="13sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.15"
-                    android:layout_marginBottom="12dp"/>
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:scrollbars="none">
 
-                <!-- Kids container - dynamically populated -->
                 <LinearLayout
                     android:id="@+id/kidsContainer"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:gravity="center_horizontal"/>
+                    android:gravity="center_horizontal"
+                    android:paddingHorizontal="16dp"/>
+            </ScrollView>
 
-                <!-- PIN dots -->
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginTop="20dp">
+            <!-- PIN dots -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="16dp">
 
-                    <TextView android:id="@+id/dot1" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="○" android:textColor="#4d96ff" android:textSize="36sp" android:layout_margin="6dp"/>
-                    <TextView android:id="@+id/dot2" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="○" android:textColor="#4d96ff" android:textSize="36sp" android:layout_margin="6dp"/>
-                    <TextView android:id="@+id/dot3" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="○" android:textColor="#4d96ff" android:textSize="36sp" android:layout_margin="6dp"/>
-                    <TextView android:id="@+id/dot4" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="○" android:textColor="#4d96ff" android:textSize="36sp" android:layout_margin="6dp"/>
-                </LinearLayout>
-
+                <TextView android:id="@+id/dot1" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="○" android:textColor="#4d96ff" android:textSize="36sp" android:layout_margin="6dp"/>
+                <TextView android:id="@+id/dot2" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="○" android:textColor="#4d96ff" android:textSize="36sp" android:layout_margin="6dp"/>
+                <TextView android:id="@+id/dot3" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="○" android:textColor="#4d96ff" android:textSize="36sp" android:layout_margin="6dp"/>
+                <TextView android:id="@+id/dot4" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="○" android:textColor="#4d96ff" android:textSize="36sp" android:layout_margin="6dp"/>
             </LinearLayout>
-        </ScrollView>
+
+        </LinearLayout>
 
     </LinearLayout>
 </LinearLayout>
