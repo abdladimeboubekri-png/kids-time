@@ -23,7 +23,6 @@ class LockActivity : AppCompatActivity() {
     private lateinit var rowContainers: List<LinearLayout>
     private lateinit var rowDigits: List<List<TextView>>
 
-    // Bottom row: left = backspace, middle = 0, right = BACK (return arrow)
     private val digitGrid = listOf(
         listOf("1", "2", "3"),
         listOf("4", "5", "6"),
@@ -41,10 +40,6 @@ class LockActivity : AppCompatActivity() {
     private var blockedPackage: String? = null
     private var kidViews: MutableList<View> = mutableListOf()
 
-    // Debounce: ignore key presses that come too fast in a row
-    // Mi TV Stick remote auto-repeats while held — without this, holding ⬆️
-    // briefly skips 5 kids at once. 220ms is comfortable for both single
-    // press and intentional multi-press, but rejects spam from auto-repeat.
     private var lastKeyTime: Long = 0L
     private val keyDebounceMs: Long = 220L
 
@@ -83,9 +78,6 @@ class LockActivity : AppCompatActivity() {
             }
         }
 
-        // CRITICAL: prevent the ScrollView from stealing up/down D-pad events.
-        // Without this, on Mi TV Stick the up/down keys scroll the kid list
-        // pixel-by-pixel instead of jumping to the next kid card.
         kidsScrollView.isFocusable = false
         kidsScrollView.isFocusableInTouchMode = false
         kidsScrollView.descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
@@ -97,7 +89,6 @@ class LockActivity : AppCompatActivity() {
             View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
     }
 
-    // ============== KID LIST RENDERING ==============
     private fun renderKids() {
         kidsContainer.removeAllViews()
         kidViews.clear()
@@ -112,8 +103,6 @@ class LockActivity : AppCompatActivity() {
                 if (left > 0) "${formatTime(left)} left" else "Time's up today"
             card.alpha = if (left > 0) 1f else 0.4f
             card.tag = kid.id
-            // Make the card non-focusable so the system focus engine can't
-            // steal events from us
             card.isFocusable = false
             card.isClickable = false
             kidsContainer.addView(card)
@@ -121,7 +110,6 @@ class LockActivity : AppCompatActivity() {
         }
     }
 
-    // ============== MODE TRANSITIONS ==============
     private fun enterKidsMode() {
         mode = Mode.KIDS
         selectedKidId = -1
@@ -157,14 +145,12 @@ class LockActivity : AppCompatActivity() {
         hintText.text = "\u2B06\uFE0F \u2B07\uFE0F row  \u00B7  \u2B05\uFE0F \u23FA \u27A1\uFE0F pick number"
     }
 
-    // ============== HIGHLIGHTS ==============
     private fun highlightKid(idx: Int) {
         kidViews.forEachIndexed { i, view ->
             view.setBackgroundResource(
                 if (i == idx) R.drawable.btn_kid_focused else R.drawable.btn_kid
             )
         }
-        // Smooth-scroll the focused card into view inside its ScrollView
         val focused = kidViews.getOrNull(idx) ?: return
         focused.post {
             val cardTop = focused.top
@@ -192,7 +178,6 @@ class LockActivity : AppCompatActivity() {
         }
     }
 
-    // ============== INPUT HANDLERS ==============
     private fun onKidConfirmed() {
         val kids = storage.getKids()
         val kid = kids.getOrNull(selectedKidIndex) ?: return
@@ -249,12 +234,16 @@ class LockActivity : AppCompatActivity() {
                 updateDots()
                 return
             }
-            // Initialize session: record start time and current used-sec
-            // so MonitorService can compute time accurately via UsageStats.
+            // Initialize session
             storage.setSessionStartMs(System.currentTimeMillis())
             storage.setSessionStartUsedSec(kid.usedSec)
             storage.setActiveKid(kid.id)
             storage.setLockGraceUntil(System.currentTimeMillis() + 8_000L)
+
+            // SCHEDULE THE WAKEUP ALARM — this is what guarantees the lock
+            // appears even when YouTube has frozen our service.
+            AlarmScheduler.scheduleTimeUp(this, left)
+
             Toast.makeText(this, "Welcome ${kid.emoji} ${kid.name}!", Toast.LENGTH_SHORT).show()
             blockedPackage?.let {
                 if (it != "test") {
@@ -274,6 +263,7 @@ class LockActivity : AppCompatActivity() {
     }
 
     private fun goHome() {
+        AlarmScheduler.cancel(this)
         storage.setActiveKid(-1)
         storage.setSessionStartMs(0L)
         storage.setSessionStartUsedSec(0L)
@@ -290,33 +280,17 @@ class LockActivity : AppCompatActivity() {
         if (mode == Mode.PIN) enterKidsMode() else goHome()
     }
 
-    // ============== D-PAD HANDLING ==============
-    // Use dispatchKeyEvent at the top of the input chain so we intercept
-    // EVERY key event before any view (ScrollView, focus engine, etc.)
-    // can swallow it.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action != KeyEvent.ACTION_DOWN) {
-            return super.dispatchKeyEvent(event)
-        }
-
-        // Reject auto-repeat events. When you hold the D-pad button on the
-        // Mi TV Stick, the system fires repeated KEYDOWN events with
-        // getRepeatCount() > 0 — these would skip across multiple kids
-        // / multiple rows in one button-hold.
+        if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
         if (event.repeatCount > 0) return true
-
-        // Time-based debounce as a second line of defense for remotes
-        // that send rapid bursts on a single click.
         val now = System.currentTimeMillis()
         if (now - lastKeyTime < keyDebounceMs) return true
         lastKeyTime = now
 
-        // Route to mode-specific handler
         val handled = when (mode) {
             Mode.KIDS -> handleKidsModeKey(event.keyCode)
             Mode.PIN -> handlePinModeKey(event.keyCode)
         }
-        // If we didn't handle it, fall through (so BACK still works etc.)
         return if (handled) true else super.dispatchKeyEvent(event)
     }
 
