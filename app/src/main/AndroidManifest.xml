@@ -2,7 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permissions needed to monitor and lock other apps -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
@@ -10,10 +9,12 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- This permission is needed for the lock screen to come up over other apps -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
-    <!-- Android TV requirements -->
+    <!-- Alarm permissions: needed to wake the device exactly when a kid's time runs out -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
@@ -26,7 +27,6 @@
         android:theme="@style/Theme.KidTime"
         android:supportsRtl="true">
 
-        <!-- Main launcher activity (works on TV and phone) -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -38,7 +38,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Lock screen activity that pops up over blocked apps -->
         <activity
             android:name=".LockActivity"
             android:exported="false"
@@ -49,7 +48,6 @@
             android:taskAffinity=""
             android:theme="@style/Theme.KidTime.Lock" />
 
-        <!-- Foreground service that monitors apps -->
         <service
             android:name=".MonitorService"
             android:exported="false"
@@ -65,6 +63,18 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Time-up alarm receiver: fires when a kid's time should run out,
+             EVEN if our service has been suspended by the OS. This is the
+             reliable mechanism for enforcing time limits during YouTube
+             fullscreen playback. -->
+        <receiver
+            android:name=".TimeUpReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.kidtime.tv.TIME_UP" />
             </intent-filter>
         </receiver>
 
