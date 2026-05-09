@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 
 class MonitorService : Service() {
@@ -20,6 +21,7 @@ class MonitorService : Service() {
     private var lastForegroundPackage: String? = null
     private var lockShowing: Boolean = false
     private var lastLockShownAt: Long = 0L
+    private var tickCount: Long = 0L
 
     private val tickRunnable = object : Runnable {
         override fun run() {
@@ -32,7 +34,8 @@ class MonitorService : Service() {
         super.onCreate()
         storage = Storage(this)
         usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        startForeground(NOTIF_ID, buildNotification())
+        startForeground(NOTIF_ID, buildNotification("KidTime starting…"))
+        Toast.makeText(this, "KidTime service started", Toast.LENGTH_SHORT).show()
         handler.post(tickRunnable)
     }
 
@@ -45,6 +48,7 @@ class MonitorService : Service() {
     }
 
     private fun tick() {
+        tickCount++
         val now = System.currentTimeMillis()
         val fg = getForegroundApp() ?: return
         val isOurApp = (fg == packageName)
@@ -61,14 +65,18 @@ class MonitorService : Service() {
         }
 
         if (isBlocked) {
-            // CRITICAL: Always check for time-up FIRST, before any other logic.
-            // This must work even during grace period - if a kid uses up all
-            // their time, they should be locked immediately even mid-watch.
+            // CRITICAL: Always check time first, even during grace period
             if (activeKid >= 0) {
                 updateUsedTimeFromSession(activeKid)
                 val kid = storage.getKids().find { it.id == activeKid }
+
+                // Update the persistent notification with live status
+                val left = if (kid != null) kid.dailyLimitSec - kid.usedSec else 0
+                updateNotification("${kid?.emoji} ${kid?.name}: ${formatTime(left)} left  •  tick #$tickCount")
+
                 if (kid != null && kid.usedSec >= kid.dailyLimitSec) {
-                    Log.d(TAG, "Kid ${kid.name} OUT OF TIME mid-watch (${kid.usedSec}/${kid.dailyLimitSec}s)")
+                    Log.d(TAG, "TIME UP for ${kid.name}: ${kid.usedSec}/${kid.dailyLimitSec}s")
+                    Toast.makeText(this, "⏰ ${kid.name}'s time is up!", Toast.LENGTH_LONG).show()
                     storage.setActiveKid(-1)
                     clearSession()
                     storage.setLockGraceUntil(0L)
@@ -78,13 +86,11 @@ class MonitorService : Service() {
                 }
             }
 
-            // Grace period: don't trigger PIN re-prompt
             if (inGracePeriod && activeKid >= 0) {
                 lastForegroundPackage = fg
                 return
             }
 
-            // Outside grace, no active kid OR app switched -> require fresh PIN
             if (activeKid < 0 || appChanged) {
                 if (activeKid >= 0) updateUsedTimeFromSession(activeKid)
                 storage.setActiveKid(-1)
@@ -98,11 +104,11 @@ class MonitorService : Service() {
             return
         }
 
-        // Foreground is not our app and not a blocked app
         if (!inGracePeriod && activeKid >= 0) {
             updateUsedTimeFromSession(activeKid)
             storage.setActiveKid(-1)
             clearSession()
+            updateNotification("Idle (no active kid)")
         }
         lastForegroundPackage = fg
     }
@@ -139,7 +145,6 @@ class MonitorService : Service() {
         var totalMs = 0L
         var currentBlockedStart: Long = -1L
 
-        // Detect what was in foreground at session start
         val priorEvents = usageStatsManager.queryEvents(start - 60_000L, start + 1)
         val priorEvent = UsageEvents.Event()
         var priorPackage: String? = null
@@ -161,7 +166,6 @@ class MonitorService : Service() {
             val ts = event.timeStamp
             if (ts < start) continue
             if (ts > end) break
-
             val pkg = event.packageName
             val type = event.eventType
 
@@ -200,47 +204,70 @@ class MonitorService : Service() {
     }
 
     /**
-     * Robust lock-screen launcher.
+     * Aggressive multi-attempt lock launcher.
      *
-     * Android 10+ silently blocks Service.startActivity() unless we have:
-     * - SYSTEM_ALERT_WINDOW permission (granted at setup), AND
-     * - the right intent flags
-     *
-     * AS A BACKUP: we also fire a full-screen notification with a
-     * high-priority PendingIntent. The notification system is allowed
-     * to bring activities to the foreground even from background.
+     * Strategy: try every known mechanism that can bring an activity
+     * to foreground from a background service on Android TV.
+     * On Mi TV Stick (Android 9-11) the most reliable mechanism is
+     * sending the user HOME first, then launching our activity.
      */
     private fun forceShowLock(blockedPackage: String) {
         val now = System.currentTimeMillis()
-        // Throttle: at most one lock attempt every 2 seconds
-        if (now - lastLockShownAt < 2000L) return
+        if (now - lastLockShownAt < 1500L) return
         lastLockShownAt = now
         lockShowing = true
 
-        Log.d(TAG, "Showing lock for package: $blockedPackage")
+        Toast.makeText(this, "🔒 Showing lock screen…", Toast.LENGTH_SHORT).show()
+        Log.d(TAG, "forceShowLock: blocked=$blockedPackage")
 
+        // Step 1: send HOME to break out of YouTube/Netflix
+        // This is a USER-INITIATED-LIKE action that breaks the
+        // background-activity-launch restriction
+        try {
+            val home = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(home)
+            Log.d(TAG, "Home intent sent")
+        } catch (e: Exception) {
+            Log.e(TAG, "Home intent failed: ${e.message}")
+        }
+
+        // Step 2: queue our LockActivity to launch shortly after
+        // Delay gives the home transition time to start
+        handler.postDelayed({
+            launchLockActivity(blockedPackage)
+        }, 300)
+
+        // Step 3: also schedule a backup attempt 1.5s later in case
+        // the first one was suppressed
+        handler.postDelayed({
+            launchLockActivity(blockedPackage)
+        }, 1500)
+
+        handler.postDelayed({ lockShowing = false }, 3000)
+    }
+
+    private fun launchLockActivity(blockedPackage: String) {
+        Log.d(TAG, "Launching LockActivity")
         val lockIntent = Intent(this, LockActivity::class.java).apply {
             addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
                 Intent.FLAG_ACTIVITY_CLEAR_TOP or
                 Intent.FLAG_ACTIVITY_SINGLE_TOP or
                 Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
-                Intent.FLAG_ACTIVITY_NO_HISTORY or
-                Intent.FLAG_ACTIVITY_NO_USER_ACTION
+                Intent.FLAG_ACTIVITY_NO_HISTORY
             )
             putExtra("blocked_package", blockedPackage)
         }
-
-        // Method 1: try direct startActivity (works on most TVs with overlay perm)
         try {
             startActivity(lockIntent)
-            Log.d(TAG, "Direct startActivity succeeded")
         } catch (e: Exception) {
-            Log.e(TAG, "Direct startActivity failed: ${e.message}")
+            Log.e(TAG, "Direct launch failed: ${e.message}")
         }
 
-        // Method 2 (fallback): full-screen notification with PendingIntent
-        // This is allowed even when background-activity-launches are blocked.
+        // Also fire a full-screen notification as backup
         try {
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -249,7 +276,7 @@ class MonitorService : Service() {
             val pi = PendingIntent.getActivity(this, 0, lockIntent, flags)
 
             val notif = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
-                .setContentTitle("KidTime — Time's up!")
+                .setContentTitle("⏰ KidTime — PIN required")
                 .setContentText("Tap to enter PIN")
                 .setSmallIcon(android.R.drawable.ic_lock_lock)
                 .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -261,12 +288,9 @@ class MonitorService : Service() {
 
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.notify(ALERT_NOTIF_ID, notif)
-            Log.d(TAG, "Full-screen notification fired")
         } catch (e: Exception) {
             Log.e(TAG, "Full-screen notification failed: ${e.message}")
         }
-
-        handler.postDelayed({ lockShowing = false }, 1500)
     }
 
     private fun getForegroundApp(): String? {
@@ -284,15 +308,13 @@ class MonitorService : Service() {
         return lastPackage
     }
 
-    private fun buildNotification(): Notification {
+    private fun buildNotification(text: String): Notification {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            // Low-importance channel for the persistent monitor notification
             nm.createNotificationChannel(NotificationChannel(
                 CHANNEL_ID, "KidTime Monitor",
                 NotificationManager.IMPORTANCE_LOW
             ))
-            // Max-importance channel for time's-up alerts (full-screen)
             val alertCh = NotificationChannel(
                 ALERT_CHANNEL_ID, "KidTime Lock Alerts",
                 NotificationManager.IMPORTANCE_HIGH
@@ -305,10 +327,23 @@ class MonitorService : Service() {
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("KidTime is watching")
-            .setContentText("Monitoring kids' TV time")
+            .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setOngoing(true)
             .build()
+    }
+
+    private fun updateNotification(text: String) {
+        try {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.notify(NOTIF_ID, buildNotification(text))
+        } catch (e: Exception) {}
+    }
+
+    private fun formatTime(sec: Long): String {
+        val m = sec / 60
+        val s = sec % 60
+        return "${m}m ${s}s"
     }
 
     companion object {
