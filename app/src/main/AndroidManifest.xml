@@ -9,6 +9,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- This permission is needed for the lock screen to come up over other apps -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <!-- Android TV requirements -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
@@ -43,6 +46,7 @@
             android:launchMode="singleInstance"
             android:showOnLockScreen="true"
             android:turnScreenOn="true"
+            android:taskAffinity=""
             android:theme="@style/Theme.KidTime.Lock" />
 
         <!-- Foreground service that monitors apps -->
