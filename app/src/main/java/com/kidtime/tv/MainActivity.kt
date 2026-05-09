@@ -9,7 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.view.View
+import android.view.LayoutInflater
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -20,6 +20,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusUsage: TextView
     private lateinit var statusOverlay: TextView
     private lateinit var kidsContainer: LinearLayout
+
+    private val emojiOptions = listOf(
+        "🦁", "🐼", "🦋", "🐰", "🦊", "🐻", "🐯", "🦄", "🐶", "🐱",
+        "🦉", "🐢", "🐳", "🦒", "🐧", "🦘", "🐨", "🦝", "🐹", "🦇"
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,13 +40,13 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<Button>(R.id.btnOverlay).setOnClickListener {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName"))
-                startActivity(intent)
+                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")))
             }
         }
         findViewById<Button>(R.id.btnPickApps).setOnClickListener { pickApps() }
-        findViewById<Button>(R.id.btnSettings).setOnClickListener { openSettingsDialog() }
+        findViewById<Button>(R.id.btnAddKid).setOnClickListener { showKidDialog(null) }
+        findViewById<Button>(R.id.btnAdminPin).setOnClickListener { changeAdminPin() }
         findViewById<Button>(R.id.btnTest).setOnClickListener {
             val i = Intent(this, LockActivity::class.java)
             i.putExtra("blocked_package", "test")
@@ -59,68 +64,130 @@ class MainActivity : AppCompatActivity() {
         val hasOverlay = hasOverlayPermission()
         statusUsage.text = if (hasUsage) "✅ Usage Access: Granted" else "❌ Usage Access: NOT granted"
         statusOverlay.text = if (hasOverlay) "✅ Overlay Permission: Granted" else "❌ Overlay Permission: NOT granted"
-
-        if (hasUsage && hasOverlay) {
-            MonitorService.start(this)
-        }
-
+        if (hasUsage && hasOverlay) MonitorService.start(this)
         renderKids()
     }
 
     private fun renderKids() {
         kidsContainer.removeAllViews()
         val kids = storage.getKids()
-        val limit = storage.getDailyLimitSec()
+        val inflater = LayoutInflater.from(this)
         kids.forEach { kid ->
-            val v = layoutInflater.inflate(R.layout.item_kid, kidsContainer, false)
+            val v = inflater.inflate(R.layout.item_kid, kidsContainer, false)
             v.findViewById<TextView>(R.id.kidEmoji).text = kid.emoji
             v.findViewById<TextView>(R.id.kidName).text = kid.name
-            val left = (limit - kid.usedSec).coerceAtLeast(0)
+            val left = (kid.dailyLimitSec - kid.usedSec).coerceAtLeast(0)
             v.findViewById<TextView>(R.id.kidTime).text =
-                "${formatTime(left)} left of ${formatTime(limit)}"
-            val pct = (kid.usedSec.toFloat() / limit.toFloat() * 100f).coerceIn(0f, 100f)
+                "${formatTime(left)} left of ${formatTime(kid.dailyLimitSec)}"
+            val pct = (kid.usedSec.toFloat() / kid.dailyLimitSec.toFloat() * 100f).coerceIn(0f, 100f)
             v.findViewById<ProgressBar>(R.id.kidProgress).progress = pct.toInt()
+
+            v.findViewById<Button>(R.id.kidEdit).setOnClickListener { showKidDialog(kid) }
             v.findViewById<Button>(R.id.kidReset).setOnClickListener {
                 kid.usedSec = 0
                 storage.saveKids(kids)
                 renderKids()
             }
+            v.findViewById<Button>(R.id.kidDelete).setOnClickListener { confirmDelete(kid) }
             kidsContainer.addView(v)
+        }
+
+        if (kids.isEmpty()) {
+            val empty = TextView(this)
+            empty.text = "No kids added yet. Tap + Add Kid below."
+            empty.setTextColor(0xFF7a82a8.toInt())
+            empty.setPadding(20, 20, 20, 20)
+            kidsContainer.addView(empty)
         }
     }
 
-    private fun openSettingsDialog() {
-        val view = layoutInflater.inflate(R.layout.dialog_settings, null)
-        val kids = storage.getKids()
+    private fun showKidDialog(existing: Kid?) {
+        val view = layoutInflater.inflate(R.layout.dialog_kid, null)
+        val nameEt = view.findViewById<EditText>(R.id.dlgName)
+        val pinEt = view.findViewById<EditText>(R.id.dlgPin)
+        val limitEt = view.findViewById<EditText>(R.id.dlgLimit)
+        val emojiSpinner = view.findViewById<Spinner>(R.id.dlgEmoji)
 
-        val name1 = view.findViewById<EditText>(R.id.name1)
-        val pin1 = view.findViewById<EditText>(R.id.pin1)
-        val name2 = view.findViewById<EditText>(R.id.name2)
-        val pin2 = view.findViewById<EditText>(R.id.pin2)
-        val name3 = view.findViewById<EditText>(R.id.name3)
-        val pin3 = view.findViewById<EditText>(R.id.pin3)
-        val limitHrs = view.findViewById<EditText>(R.id.limitHrs)
-        val adminPin = view.findViewById<EditText>(R.id.adminPin)
+        // Populate emoji spinner
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, emojiOptions)
+        emojiSpinner.adapter = adapter
 
-        name1.setText(kids[0].name); pin1.setText(kids[0].pin)
-        name2.setText(kids[1].name); pin2.setText(kids[1].pin)
-        name3.setText(kids[2].name); pin3.setText(kids[2].pin)
-        limitHrs.setText((storage.getDailyLimitSec() / 3600.0).toString())
-        adminPin.setText(storage.getAdminPin())
+        if (existing != null) {
+            nameEt.setText(existing.name)
+            pinEt.setText(existing.pin)
+            limitEt.setText((existing.dailyLimitSec / 3600.0).toString())
+            val idx = emojiOptions.indexOf(existing.emoji)
+            if (idx >= 0) emojiSpinner.setSelection(idx)
+        } else {
+            limitEt.setText("3")
+        }
 
         AlertDialog.Builder(this)
-            .setTitle("Settings")
+            .setTitle(if (existing == null) "Add a Kid" else "Edit ${existing.name}")
             .setView(view)
             .setPositiveButton("Save") { _, _ ->
-                kids[0].name = name1.text.toString(); kids[0].pin = pin1.text.toString()
-                kids[1].name = name2.text.toString(); kids[1].pin = pin2.text.toString()
-                kids[2].name = name3.text.toString(); kids[2].pin = pin3.text.toString()
-                storage.saveKids(kids)
-                val hrs = limitHrs.text.toString().toDoubleOrNull() ?: 3.0
-                storage.setDailyLimitSec((hrs * 3600).toLong())
-                storage.setAdminPin(adminPin.text.toString())
-                Toast.makeText(this, "Saved!", Toast.LENGTH_SHORT).show()
-                refresh()
+                val name = nameEt.text.toString().trim()
+                val pin = pinEt.text.toString().trim()
+                val emoji = emojiOptions[emojiSpinner.selectedItemPosition]
+                val hours = limitEt.text.toString().toDoubleOrNull() ?: 3.0
+                val limitSec = (hours * 3600).toLong()
+
+                if (name.isEmpty()) {
+                    toast("Name cannot be empty"); return@setPositiveButton
+                }
+                if (pin.length != 4 || !pin.all { it.isDigit() }) {
+                    toast("PIN must be exactly 4 digits"); return@setPositiveButton
+                }
+                if (limitSec < 60) {
+                    toast("Time limit too short"); return@setPositiveButton
+                }
+
+                if (existing == null) {
+                    storage.addKid(name, emoji, pin, limitSec)
+                    toast("Added $name!")
+                } else {
+                    val kids = storage.getKids()
+                    kids.find { it.id == existing.id }?.apply {
+                        this.name = name
+                        this.pin = pin
+                        this.emoji = emoji
+                        this.dailyLimitSec = limitSec
+                    }
+                    storage.saveKids(kids)
+                    toast("Updated $name!")
+                }
+                renderKids()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun confirmDelete(kid: Kid) {
+        AlertDialog.Builder(this)
+            .setTitle("Delete ${kid.name}?")
+            .setMessage("This will permanently remove ${kid.name} and their time data.")
+            .setPositiveButton("Delete") { _, _ ->
+                storage.removeKid(kid.id)
+                renderKids()
+                toast("${kid.name} removed")
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun changeAdminPin() {
+        val view = layoutInflater.inflate(R.layout.dialog_admin_pin, null)
+        val newPinEt = view.findViewById<EditText>(R.id.newAdminPin)
+        newPinEt.setText(storage.getAdminPin())
+        AlertDialog.Builder(this)
+            .setTitle("Change Admin PIN")
+            .setView(view)
+            .setPositiveButton("Save") { _, _ ->
+                val pin = newPinEt.text.toString()
+                if (pin.length == 4 && pin.all { it.isDigit() }) {
+                    storage.setAdminPin(pin)
+                    toast("Admin PIN updated")
+                } else toast("PIN must be 4 digits")
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -129,7 +196,15 @@ class MainActivity : AppCompatActivity() {
     private fun pickApps() {
         val pm = packageManager
         val installed = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-            .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 || it.packageName.contains("youtube") || it.packageName.contains("netflix") || it.packageName.contains("disney") }
+            .filter {
+                (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 ||
+                it.packageName.contains("youtube") ||
+                it.packageName.contains("netflix") ||
+                it.packageName.contains("disney") ||
+                it.packageName.contains("spotify") ||
+                it.packageName.contains("twitch") ||
+                it.packageName.contains("amazon")
+            }
             .sortedBy { pm.getApplicationLabel(it).toString().lowercase() }
 
         val labels = installed.map { "${pm.getApplicationLabel(it)} (${it.packageName})" }.toTypedArray()
@@ -144,7 +219,7 @@ class MainActivity : AppCompatActivity() {
                 val newSet = mutableSetOf<String>()
                 packages.forEachIndexed { i, p -> if (checked[i]) newSet.add(p) }
                 storage.setBlockedPackages(newSet)
-                Toast.makeText(this, "Locked apps updated", Toast.LENGTH_SHORT).show()
+                toast("Locked apps updated")
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -153,8 +228,7 @@ class MainActivity : AppCompatActivity() {
     private fun hasUsageStats(): Boolean {
         val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
         val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            appOps.unsafeCheckOpNoThrow(
-                AppOpsManager.OPSTR_GET_USAGE_STATS,
+            appOps.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS,
                 android.os.Process.myUid(), packageName)
         } else {
             @Suppress("DEPRECATION")
@@ -165,10 +239,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun hasOverlayPermission(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            Settings.canDrawOverlays(this)
-        } else true
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) Settings.canDrawOverlays(this) else true
     }
+
+    private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
 
     private fun formatTime(sec: Long): String {
         val h = sec / 3600
