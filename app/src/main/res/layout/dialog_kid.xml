@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="New 4-digit Admin PIN" android:textStyle="bold" android:textSize="14sp"/>
+    <EditText android:id="@+id/newAdminPin"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:inputType="numberPassword" android:maxLength="4"/>
+</LinearLayout>
