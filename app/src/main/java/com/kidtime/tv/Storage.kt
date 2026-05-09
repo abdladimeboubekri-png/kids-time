@@ -73,9 +73,22 @@ class Storage(context: Context) {
     }
 
     fun addUsedSeconds(kidId: Int, seconds: Long) {
+        if (seconds <= 0) return
         val kids = getKids()
         kids.find { it.id == kidId }?.let {
             it.usedSec += seconds
+            saveKids(kids)
+        }
+    }
+
+    /**
+     * Set kid's used seconds to an exact value (used by session-based tracking
+     * to avoid double-counting from delta accumulation).
+     */
+    fun setUsedSeconds(kidId: Int, seconds: Long) {
+        val kids = getKids()
+        kids.find { it.id == kidId }?.let {
+            it.usedSec = seconds.coerceAtLeast(0)
             saveKids(kids)
         }
     }
@@ -112,10 +125,20 @@ class Storage(context: Context) {
     fun getActiveKid(): Int = prefs.getInt("active_kid", -1)
     fun setActiveKid(id: Int) = prefs.edit().putInt("active_kid", id).apply()
 
-    // Grace period: a timestamp in millis until which the monitor service will
-    // NOT treat an app switch as needing a fresh PIN. Used right after a kid
-    // successfully enters their PIN, so the launch of the blocked app doesn't
-    // immediately re-trigger the lock.
+    // ============== SESSION TRACKING (NEW) ==============
+    // When a kid PINs in, we record:
+    //   - sessionStartMs: timestamp when their session began
+    //   - sessionStartUsedSec: their used-time AT that moment
+    // The MonitorService computes elapsed time inside blocked apps using
+    // Android's UsageStatsManager (authoritative) and adds it to the
+    // start value to get current used-time. This avoids any drift from
+    // service throttling or missed ticks.
+    fun getSessionStartMs(): Long = prefs.getLong("session_start_ms", 0L)
+    fun setSessionStartMs(ms: Long) = prefs.edit().putLong("session_start_ms", ms).apply()
+
+    fun getSessionStartUsedSec(): Long = prefs.getLong("session_start_used_sec", 0L)
+    fun setSessionStartUsedSec(s: Long) = prefs.edit().putLong("session_start_used_sec", s).apply()
+
     fun getLockGraceUntil(): Long = prefs.getLong("lock_grace_until", 0L)
     fun setLockGraceUntil(ts: Long) = prefs.edit().putLong("lock_grace_until", ts).apply()
 
@@ -138,6 +161,8 @@ class Storage(context: Context) {
             prefs.edit()
                 .putString("kids", newArr.toString())
                 .putInt("active_kid", -1)
+                .putLong("session_start_ms", 0L)
+                .putLong("session_start_used_sec", 0L)
                 .apply()
         }
     }
