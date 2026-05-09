@@ -81,10 +81,6 @@ class Storage(context: Context) {
         }
     }
 
-    /**
-     * Set kid's used seconds to an exact value (used by session-based tracking
-     * to avoid double-counting from delta accumulation).
-     */
     fun setUsedSeconds(kidId: Int, seconds: Long) {
         val kids = getKids()
         kids.find { it.id == kidId }?.let {
@@ -125,14 +121,6 @@ class Storage(context: Context) {
     fun getActiveKid(): Int = prefs.getInt("active_kid", -1)
     fun setActiveKid(id: Int) = prefs.edit().putInt("active_kid", id).apply()
 
-    // ============== SESSION TRACKING (NEW) ==============
-    // When a kid PINs in, we record:
-    //   - sessionStartMs: timestamp when their session began
-    //   - sessionStartUsedSec: their used-time AT that moment
-    // The MonitorService computes elapsed time inside blocked apps using
-    // Android's UsageStatsManager (authoritative) and adds it to the
-    // start value to get current used-time. This avoids any drift from
-    // service throttling or missed ticks.
     fun getSessionStartMs(): Long = prefs.getLong("session_start_ms", 0L)
     fun setSessionStartMs(ms: Long) = prefs.edit().putLong("session_start_ms", ms).apply()
 
@@ -141,6 +129,11 @@ class Storage(context: Context) {
 
     fun getLockGraceUntil(): Long = prefs.getLong("lock_grace_until", 0L)
     fun setLockGraceUntil(ts: Long) = prefs.edit().putLong("lock_grace_until", ts).apply()
+
+    // Debug overlay setting (default ON for first-time setup, off after parent disables)
+    fun isDebugOverlayEnabled(): Boolean = prefs.getBoolean("debug_overlay", true)
+    fun setDebugOverlayEnabled(enabled: Boolean) =
+        prefs.edit().putBoolean("debug_overlay", enabled).apply()
 
     private fun resetIfNewDay() {
         val cal = Calendar.getInstance()
