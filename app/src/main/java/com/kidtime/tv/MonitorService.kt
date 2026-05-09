@@ -53,6 +53,8 @@ class MonitorService : Service() {
         val blocked = storage.getBlockedPackages()
         val isBlocked = blocked.contains(fg)
         val appChanged = (lastForegroundPackage != null && lastForegroundPackage != fg)
+        val activeKid = storage.getActiveKid()
+        val inGracePeriod = now < storage.getLockGraceUntil()
 
         if (isOurApp) {
             lockShowing = false
@@ -61,7 +63,22 @@ class MonitorService : Service() {
         }
 
         if (isBlocked) {
-            val activeKid = storage.getActiveKid()
+            // CRITICAL FIX: during grace period after a successful PIN,
+            // do NOT treat this as a fresh app entry. The grace period
+            // exists because the system takes ~1-2 seconds to actually
+            // launch the blocked app after we close the lock screen,
+            // and we don't want that transition to look like an "app
+            // switch" that requires another PIN.
+            if (inGracePeriod && activeKid >= 0) {
+                // Just count time normally
+                val secElapsed = (deltaMs / 1000).coerceAtLeast(0)
+                if (secElapsed > 0) storage.addUsedSeconds(activeKid, secElapsed)
+                checkOutOfTime(activeKid, fg)
+                lastForegroundPackage = fg
+                return
+            }
+
+            // Outside grace period: enforce normal PIN-on-switch logic
             if (activeKid < 0 || appChanged) {
                 storage.setActiveKid(-1)
                 showLock(fg)
@@ -69,27 +86,30 @@ class MonitorService : Service() {
                 return
             }
 
-            // Count time only for the active kid
             val secElapsed = (deltaMs / 1000).coerceAtLeast(0)
-            if (secElapsed > 0) {
-                storage.addUsedSeconds(activeKid, secElapsed)
-            }
-
-            // Check kid's individual limit
-            val kid = storage.getKids().find { it.id == activeKid }
-            if (kid != null && kid.usedSec >= kid.dailyLimitSec) {
-                storage.setActiveKid(-1)
-                showLock(fg)
-            }
+            if (secElapsed > 0) storage.addUsedSeconds(activeKid, secElapsed)
+            checkOutOfTime(activeKid, fg)
             lastForegroundPackage = fg
             return
         }
 
-        // Not our app, not blocked: home, allowed apps, settings
-        if (storage.getActiveKid() >= 0) {
+        // Foreground is not our app and not a blocked app:
+        // Home, settings, allowed apps, etc.
+        // BUT: if we're still in grace period, the kid hasn't reached the
+        // blocked app yet - keep them active for a moment longer.
+        if (!inGracePeriod && activeKid >= 0) {
             storage.setActiveKid(-1)
         }
         lastForegroundPackage = fg
+    }
+
+    private fun checkOutOfTime(activeKid: Int, fg: String) {
+        val kid = storage.getKids().find { it.id == activeKid }
+        if (kid != null && kid.usedSec >= kid.dailyLimitSec) {
+            storage.setActiveKid(-1)
+            storage.setLockGraceUntil(0L)
+            showLock(fg)
+        }
     }
 
     private fun showLock(blockedPackage: String) {
