@@ -20,6 +20,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusUsage: TextView
     private lateinit var statusOverlay: TextView
     private lateinit var kidsContainer: LinearLayout
+    private lateinit var btnToggleDebug: Button
 
     private val emojiOptions = listOf(
         "🦁", "🐼", "🦋", "🐰", "🦊", "🐻", "🐯", "🦄", "🐶", "🐱",
@@ -34,6 +35,7 @@ class MainActivity : AppCompatActivity() {
         statusUsage = findViewById(R.id.statusUsage)
         statusOverlay = findViewById(R.id.statusOverlay)
         kidsContainer = findViewById(R.id.kidsContainer)
+        btnToggleDebug = findViewById(R.id.btnToggleDebug)
 
         findViewById<Button>(R.id.btnUsage).setOnClickListener {
             startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
@@ -52,6 +54,7 @@ class MainActivity : AppCompatActivity() {
             i.putExtra("blocked_package", "test")
             startActivity(i)
         }
+        btnToggleDebug.setOnClickListener { toggleDebugOverlay() }
     }
 
     override fun onResume() {
@@ -66,6 +69,22 @@ class MainActivity : AppCompatActivity() {
         statusOverlay.text = if (hasOverlay) "✅ Overlay Permission: Granted" else "❌ Overlay Permission: NOT granted"
         if (hasUsage && hasOverlay) MonitorService.start(this)
         renderKids()
+        updateDebugButton()
+    }
+
+    private fun updateDebugButton() {
+        val on = storage.isDebugOverlayEnabled()
+        btnToggleDebug.text = if (on) "🐞 Debug overlay: ON (tap to hide)"
+                              else "🐞 Debug overlay: OFF (tap to show)"
+    }
+
+    private fun toggleDebugOverlay() {
+        val newState = !storage.isDebugOverlayEnabled()
+        storage.setDebugOverlayEnabled(newState)
+        updateDebugButton()
+        Toast.makeText(this,
+            if (newState) "Debug overlay enabled" else "Debug overlay disabled",
+            Toast.LENGTH_SHORT).show()
     }
 
     private fun renderKids() {
@@ -108,7 +127,6 @@ class MainActivity : AppCompatActivity() {
         val limitEt = view.findViewById<EditText>(R.id.dlgLimit)
         val emojiSpinner = view.findViewById<Spinner>(R.id.dlgEmoji)
 
-        // Populate emoji spinner
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, emojiOptions)
         emojiSpinner.adapter = adapter
 
