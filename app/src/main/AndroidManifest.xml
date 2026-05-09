@@ -10,8 +10,6 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-
-    <!-- Alarm permissions: needed to wake the device exactly when a kid's time runs out -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
@@ -57,19 +55,22 @@
                 android:value="App usage monitor for parental control" />
         </service>
 
-        <!-- Boot receiver to restart service after reboot -->
+        <!-- Boot receiver: handles all known TV-box boot completion intents.
+             Different TVs/boxes fire different actions on power-on, so we
+             listen to all of them to ensure the service restarts and any
+             in-flight session is cleared after every reboot. -->
         <receiver
             android:name=".BootReceiver"
-            android:exported="true">
-            <intent-filter>
+            android:exported="true"
+            android:directBootAware="true">
+            <intent-filter android:priority="1000">
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
 
-        <!-- Time-up alarm receiver: fires when a kid's time should run out,
-             EVEN if our service has been suspended by the OS. This is the
-             reliable mechanism for enforcing time limits during YouTube
-             fullscreen playback. -->
         <receiver
             android:name=".TimeUpReceiver"
             android:exported="false">
