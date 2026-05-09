@@ -18,6 +18,7 @@ class MonitorService : Service() {
     private lateinit var usageStatsManager: UsageStatsManager
     private val handler = Handler(Looper.getMainLooper())
     private var lastForegroundPackage: String? = null
+    private var lastKnownForeground: String? = null  // sticky cache
     private var lockShowing: Boolean = false
     private var lastLockShownAt: Long = 0L
     private var tickCount: Long = 0L
@@ -52,7 +53,9 @@ class MonitorService : Service() {
     private fun tick() {
         tickCount++
         val now = System.currentTimeMillis()
-        val fg = getForegroundApp()
+
+        // ROBUST foreground detection (see method comments)
+        val fg = getForegroundAppRobust()
         val isOurApp = (fg == packageName)
         val blocked = storage.getBlockedPackages()
         val isBlocked = fg != null && blocked.contains(fg)
@@ -85,7 +88,7 @@ class MonitorService : Service() {
         }
 
         if (isBlocked) {
-            // Always check time first - even during grace period
+            // Always check time first
             if (activeKid >= 0) {
                 updateUsedTimeFromSession(activeKid)
                 val k = storage.getKids().find { it.id == activeKid }
@@ -129,6 +132,75 @@ class MonitorService : Service() {
         lastForegroundPackage = fg
     }
 
+    /**
+     * Robust foreground app detection.
+     *
+     * THE BUG IT FIXES: queryEvents() only returns events that occurred in the
+     * given time window. When YouTube has been in the foreground for a while
+     * with no app switches, no new events are emitted — so the function returns
+     * null even though YouTube is clearly still on screen.
+     *
+     * THE FIX: layered approach
+     *   1. Try queryUsageStats() to find the package with the most recent
+     *      lastTimeUsed > a few seconds ago — this is the authoritative
+     *      "current foreground" lookup.
+     *   2. If that fails, walk events from a much wider window (1 hour back)
+     *      and find the most recent foreground event that wasn't followed by
+     *      a backgrounding.
+     *   3. Final fallback: return our cached lastKnownForeground.
+     */
+    private fun getForegroundAppRobust(): String? {
+        val now = System.currentTimeMillis()
+
+        // Method 1: queryUsageStats — gives us aggregated stats with lastTimeUsed
+        try {
+            val stats = usageStatsManager.queryUsageStats(
+                UsageStatsManager.INTERVAL_BEST,
+                now - 60 * 60 * 1000L,  // last hour
+                now
+            )
+            if (stats != null && stats.isNotEmpty()) {
+                val mostRecent = stats
+                    .filter { it.lastTimeUsed > 0 && it.packageName.isNotBlank() }
+                    .maxByOrNull { it.lastTimeUsed }
+                if (mostRecent != null && (now - mostRecent.lastTimeUsed) < 30_000L) {
+                    lastKnownForeground = mostRecent.packageName
+                    return mostRecent.packageName
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "queryUsageStats failed", e)
+        }
+
+        // Method 2: walk a wide event window
+        try {
+            val events = usageStatsManager.queryEvents(now - 60 * 60 * 1000L, now)
+            val event = UsageEvents.Event()
+            var lastForegrounded: String? = null
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND ||
+                    event.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
+                    lastForegrounded = event.packageName
+                } else if ((event.eventType == UsageEvents.Event.MOVE_TO_BACKGROUND ||
+                            event.eventType == UsageEvents.Event.ACTIVITY_PAUSED ||
+                            event.eventType == UsageEvents.Event.ACTIVITY_STOPPED) &&
+                           event.packageName == lastForegrounded) {
+                    lastForegrounded = null
+                }
+            }
+            if (lastForegrounded != null) {
+                lastKnownForeground = lastForegrounded
+                return lastForegrounded
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "queryEvents wide failed", e)
+        }
+
+        // Method 3: cached value
+        return lastKnownForeground
+    }
+
     private fun updateUsedTimeFromSession(kidId: Int) {
         val sessionStart = storage.getSessionStartMs()
         if (sessionStart <= 0) {
@@ -153,22 +225,34 @@ class MonitorService : Service() {
         storage.setSessionStartUsedSec(0L)
     }
 
+    /**
+     * Walk the event stream and accumulate time spent in blocked apps.
+     *
+     * KEY FIX: extended the query window to be larger, AND if we never see
+     * a "background" event for the foregrounded app, we treat it as still
+     * foregrounded all the way to [end].
+     */
     private fun secondsInBlockedAppsSince(start: Long, end: Long): Long {
         if (end <= start) return 0L
         val blocked = storage.getBlockedPackages()
-        val events = usageStatsManager.queryEvents(start - 60_000L, end + 1000L)
+        // Wide query window so we capture all relevant events
+        val events = usageStatsManager.queryEvents(start - 60_000L, end + 5000L)
         val event = UsageEvents.Event()
         var totalMs = 0L
         var currentBlockedStart: Long = -1L
 
-        val priorEvents = usageStatsManager.queryEvents(start - 60_000L, start + 1)
+        // Detect what was foregrounded at session start
+        val priorEvents = usageStatsManager.queryEvents(start - 60 * 60 * 1000L, start + 1)
         val priorEvent = UsageEvents.Event()
         var priorPackage: String? = null
         while (priorEvents.hasNextEvent()) {
             priorEvents.getNextEvent(priorEvent)
-            if (isForegroundEvent(priorEvent.eventType)) {
+            if (priorEvent.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND ||
+                priorEvent.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
                 priorPackage = priorEvent.packageName
-            } else if (isBackgroundEvent(priorEvent.eventType) &&
+            } else if ((priorEvent.eventType == UsageEvents.Event.MOVE_TO_BACKGROUND ||
+                        priorEvent.eventType == UsageEvents.Event.ACTIVITY_PAUSED ||
+                        priorEvent.eventType == UsageEvents.Event.ACTIVITY_STOPPED) &&
                        priorEvent.packageName == priorPackage) {
                 priorPackage = null
             }
@@ -185,7 +269,8 @@ class MonitorService : Service() {
             val pkg = event.packageName
             val type = event.eventType
 
-            if (isForegroundEvent(type)) {
+            if (type == UsageEvents.Event.MOVE_TO_FOREGROUND ||
+                type == UsageEvents.Event.ACTIVITY_RESUMED) {
                 if (blocked.contains(pkg)) {
                     if (currentBlockedStart < 0) currentBlockedStart = ts
                 } else {
@@ -194,7 +279,9 @@ class MonitorService : Service() {
                         currentBlockedStart = -1
                     }
                 }
-            } else if (isBackgroundEvent(type)) {
+            } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND ||
+                       type == UsageEvents.Event.ACTIVITY_PAUSED ||
+                       type == UsageEvents.Event.ACTIVITY_STOPPED) {
                 if (blocked.contains(pkg) && currentBlockedStart >= 0) {
                     totalMs += (ts - currentBlockedStart)
                     currentBlockedStart = -1
@@ -202,21 +289,11 @@ class MonitorService : Service() {
             }
         }
 
+        // If a blocked app is still foregrounded at [end], close interval to end
         if (currentBlockedStart >= 0) {
             totalMs += (end - currentBlockedStart)
         }
         return (totalMs / 1000L).coerceAtLeast(0)
-    }
-
-    private fun isForegroundEvent(type: Int): Boolean {
-        return type == UsageEvents.Event.MOVE_TO_FOREGROUND ||
-               type == UsageEvents.Event.ACTIVITY_RESUMED
-    }
-
-    private fun isBackgroundEvent(type: Int): Boolean {
-        return type == UsageEvents.Event.MOVE_TO_BACKGROUND ||
-               type == UsageEvents.Event.ACTIVITY_PAUSED ||
-               type == UsageEvents.Event.ACTIVITY_STOPPED
     }
 
     private fun forceShowLock(blockedPackage: String) {
@@ -228,7 +305,6 @@ class MonitorService : Service() {
         Log.d(TAG, "forceShowLock: blocked=$blockedPackage")
         lastEvent = "forceShowLock CALLED"
 
-        // Step 1: send HOME to break out of YouTube/Netflix
         try {
             val home = Intent(Intent.ACTION_MAIN).apply {
                 addCategory(Intent.CATEGORY_HOME)
@@ -239,24 +315,15 @@ class MonitorService : Service() {
             lastEvent = "HOME sent OK"
         } catch (e: Exception) {
             Log.e(TAG, "HOME failed", e)
-            lastEvent = "HOME FAILED: ${e.message?.take(30)}"
+            lastEvent = "HOME FAILED"
         }
 
-        // Step 2: launch our LockActivity after a short delay
-        handler.postDelayed({
-            launchLockActivity(blockedPackage)
-        }, 400)
-
-        // Step 3: backup attempt at 1.8s
-        handler.postDelayed({
-            launchLockActivity(blockedPackage)
-        }, 1800)
-
+        handler.postDelayed({ launchLockActivity(blockedPackage) }, 400)
+        handler.postDelayed({ launchLockActivity(blockedPackage) }, 1800)
         handler.postDelayed({ lockShowing = false }, 3000)
     }
 
     private fun launchLockActivity(blockedPackage: String) {
-        Log.d(TAG, "Launching LockActivity")
         val lockIntent = Intent(this, LockActivity::class.java).apply {
             addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -272,7 +339,7 @@ class MonitorService : Service() {
             lastEvent = "Lock launched OK"
         } catch (e: Exception) {
             Log.e(TAG, "Direct launch failed", e)
-            lastEvent = "Lock FAILED: ${e.message?.take(30)}"
+            lastEvent = "Lock FAILED"
         }
 
         try {
@@ -298,21 +365,6 @@ class MonitorService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "Full-screen notification failed", e)
         }
-    }
-
-    private fun getForegroundApp(): String? {
-        val end = System.currentTimeMillis()
-        val start = end - 10_000
-        val events = usageStatsManager.queryEvents(start, end)
-        val event = UsageEvents.Event()
-        var lastPackage: String? = null
-        while (events.hasNextEvent()) {
-            events.getNextEvent(event)
-            if (isForegroundEvent(event.eventType)) {
-                lastPackage = event.packageName
-            }
-        }
-        return lastPackage
     }
 
     private fun buildNotification(text: String): Notification {
