@@ -49,51 +49,74 @@ class MonitorService : Service() {
         lastTickTime = now
 
         val fg = getForegroundApp() ?: return
-        val isOurApp = fg == packageName
+        val isOurApp = (fg == packageName)
         val blocked = storage.getBlockedPackages()
         val isBlocked = blocked.contains(fg)
 
-        // If a blocked app is open, check if any kid is active
+        // Track app switches: if the user changed the foreground app, treat it like a fresh entry
+        val appChanged = (lastForegroundPackage != null && lastForegroundPackage != fg)
+
+        // CASE 1: Inside our own KidTime app (lock screen, admin, etc.)
+        if (isOurApp) {
+            // Don't consume time, don't show another lock
+            lockShowing = false
+            lastForegroundPackage = fg
+            return
+        }
+
+        // CASE 2: A blocked app is in foreground
         if (isBlocked) {
             val activeKid = storage.getActiveKid()
-            if (activeKid < 0) {
-                // No one is logged in -> show lock
+
+            // If the blocked app just appeared (app switch from somewhere else)
+            // OR no kid is logged in: require fresh PIN
+            if (activeKid < 0 || appChanged) {
+                // Clear active kid so the lock screen will properly require re-PIN
+                storage.setActiveKid(-1)
                 showLock(fg)
+                lastForegroundPackage = fg
                 return
             }
-            // Add elapsed time to active kid
+
+            // Otherwise, kid is logged in and inside the blocked app - count their time
             val secElapsed = (deltaMs / 1000).coerceAtLeast(0)
             if (secElapsed > 0) {
                 storage.addUsedSeconds(activeKid, secElapsed)
             }
-            // Check if the kid ran out of time
+
+            // Check if they ran out
             val kid = storage.getKids().find { it.id == activeKid }
             if (kid != null && kid.usedSec >= storage.getDailyLimitSec()) {
                 storage.setActiveKid(-1)
                 showLock(fg)
             }
-        } else if (isOurApp) {
-            // Reset lock flag when in our app
-            lockShowing = false
-        } else {
-            // User left a blocked app, clear active kid (next time someone has to PIN in)
-            // Optional: keep them active across the home screen so they can re-enter
             lastForegroundPackage = fg
+            return
         }
+
+        // CASE 3: Foreground is not our app and not a blocked app
+        // (home screen, launcher, settings, allowed apps, etc.)
+        // -> DO NOT count time, and CLEAR the active kid so they have to re-PIN
+        //    next time they open a blocked app.
+        if (storage.getActiveKid() >= 0) {
+            storage.setActiveKid(-1)
+        }
+        lastForegroundPackage = fg
     }
 
     private fun showLock(blockedPackage: String) {
         if (lockShowing) return
         lockShowing = true
         val intent = Intent(this, LockActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
-                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                     Intent.FLAG_ACTIVITY_NO_HISTORY)
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_NO_HISTORY
+            )
             putExtra("blocked_package", blockedPackage)
         }
         startActivity(intent)
-        // Reset flag after a moment so we can re-show if needed
-        handler.postDelayed({ lockShowing = false }, 3000)
+        handler.postDelayed({ lockShowing = false }, 2000)
     }
 
     private fun getForegroundApp(): String? {
@@ -115,8 +138,10 @@ class MonitorService : Service() {
     private fun buildNotification(): Notification {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            val ch = NotificationChannel(CHANNEL_ID, "KidTime Monitor",
-                NotificationManager.IMPORTANCE_LOW)
+            val ch = NotificationChannel(
+                CHANNEL_ID, "KidTime Monitor",
+                NotificationManager.IMPORTANCE_LOW
+            )
             nm.createNotificationChannel(ch)
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
