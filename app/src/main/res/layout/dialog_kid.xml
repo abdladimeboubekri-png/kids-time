@@ -1,13 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+<LinearLayout
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="20dp">
 
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:text="New 4-digit Admin PIN" android:textStyle="bold" android:textSize="14sp"/>
-    <EditText android:id="@+id/newAdminPin"
+        android:text="Name" android:textStyle="bold" android:textSize="14sp"/>
+    <EditText android:id="@+id/dlgName"
         android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:inputType="numberPassword" android:maxLength="4"/>
+        android:hint="Kid's name" android:maxLength="15"/>
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Emoji" android:textStyle="bold" android:textSize="14sp"
+        android:layout_marginTop="14dp"/>
+    <Spinner android:id="@+id/dlgEmoji"
+        android:layout_width="match_parent" android:layout_height="wrap_content"/>
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="4-digit PIN" android:textStyle="bold" android:textSize="14sp"
+        android:layout_marginTop="14dp"/>
+    <EditText android:id="@+id/dlgPin"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:inputType="numberPassword" android:maxLength="4" android:hint="1234"/>
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Daily limit (hours)" android:textStyle="bold" android:textSize="14sp"
+        android:layout_marginTop="14dp"/>
+    <EditText android:id="@+id/dlgLimit"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:inputType="numberDecimal" android:hint="3"/>
+
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="(e.g. 1.5 = 1 hour 30 min)"
+        android:textColor="#7a82a8"
+        android:textSize="12sp"
+        android:layout_marginTop="4dp"/>
 </LinearLayout>
+</ScrollView>
