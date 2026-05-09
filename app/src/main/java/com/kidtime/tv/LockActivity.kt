@@ -16,24 +16,32 @@ class LockActivity : AppCompatActivity() {
     private lateinit var pinDots: List<TextView>
     private lateinit var statusText: TextView
     private lateinit var titleText: TextView
+    private lateinit var hintText: TextView
     private lateinit var kidsContainer: LinearLayout
 
     private lateinit var rowContainers: List<LinearLayout>
     private lateinit var rowDigits: List<List<TextView>>
 
-    // Bottom row: left = backspace, middle = 0, right = OK/submit
+    // Bottom row: left = backspace, middle = 0, right = BACK (to kid picker)
     private val digitGrid = listOf(
         listOf("1", "2", "3"),
         listOf("4", "5", "6"),
         listOf("7", "8", "9"),
-        listOf("\u232B", "0", "\u2713")
+        listOf("\u232B", "0", "\u21A9")  // Backspace, 0, Return-arrow
     )
 
+    // Two input modes:
+    //   MODE_KIDS = D-pad picks between kid cards
+    //   MODE_PIN  = D-pad locked to numpad rows; left/center/right pick column
+    private enum class Mode { KIDS, PIN }
+    private var mode: Mode = Mode.KIDS
+
     private var selectedRow: Int = 0
+    private var selectedKidIndex: Int = 0   // index of kid being focused in KIDS mode
     private var pinBuffer = StringBuilder()
     private var selectedKidId: Int = -1
     private var blockedPackage: String? = null
-    private var kidViewMap: MutableMap<Int, View> = mutableMapOf()
+    private var kidViews: MutableList<View> = mutableListOf()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,6 +51,7 @@ class LockActivity : AppCompatActivity() {
 
         titleText = findViewById(R.id.title)
         statusText = findViewById(R.id.status)
+        hintText = findViewById(R.id.hint)
         kidsContainer = findViewById(R.id.kidsContainer)
         pinDots = listOf(
             findViewById(R.id.dot1), findViewById(R.id.dot2),
@@ -65,26 +74,20 @@ class LockActivity : AppCompatActivity() {
         rowDigits.forEachIndexed { ri, row ->
             row.forEachIndexed { ci, tv ->
                 tv.text = digitGrid[ri][ci]
-                tv.setOnClickListener {
-                    selectedRow = ri
-                    highlightRow()
-                    pickColumn(ci)
-                }
             }
         }
 
         renderKids()
-        highlightRow()
+        enterKidsMode()
 
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
             View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-
-        statusText.text = "Pick your name"
     }
 
+    // ============== KID LIST RENDERING ==============
     private fun renderKids() {
         kidsContainer.removeAllViews()
-        kidViewMap.clear()
+        kidViews.clear()
         val kids = storage.getKids()
         val inflater = LayoutInflater.from(this)
         kids.forEach { kid ->
@@ -95,30 +98,69 @@ class LockActivity : AppCompatActivity() {
             card.findViewById<TextView>(R.id.kidTime).text =
                 if (left > 0) "${formatTime(left)} left" else "Time's up today"
             card.alpha = if (left > 0) 1f else 0.4f
-            card.isEnabled = left > 0
-
-            card.setOnClickListener {
-                if (left <= 0) return@setOnClickListener
-                onKidSelected(kid.id)
-            }
-
+            card.tag = kid.id
             kidsContainer.addView(card)
-            kidViewMap[kid.id] = card
+            kidViews.add(card)
         }
     }
 
-    private fun onKidSelected(id: Int) {
-        selectedKidId = id
+    // ============== MODE TRANSITIONS ==============
+    private fun enterKidsMode() {
+        mode = Mode.KIDS
+        selectedKidId = -1
         pinBuffer.clear()
         updateDots()
-        // Update card backgrounds
-        kidViewMap.forEach { (kidId, view) ->
+        statusText.text = "Pick your name"
+        hintText.text = "\u2B05\uFE0F  \u2B07\uFE0F  \u2B06\uFE0F  \u27A1\uFE0F  to navigate  \u00B7  \u23FA select"
+        // Clear numpad row highlight
+        clearRowHighlight()
+        // Highlight first available kid
+        if (kidViews.isNotEmpty()) {
+            // Find first kid that has time left
+            val kids = storage.getKids()
+            val firstAvailable = kids.indexOfFirst {
+                (it.dailyLimitSec - it.usedSec) > 0
+            }
+            selectedKidIndex = if (firstAvailable >= 0) firstAvailable else 0
+            highlightKid(selectedKidIndex)
+        }
+    }
+
+    private fun enterPinMode() {
+        mode = Mode.PIN
+        pinBuffer.clear()
+        updateDots()
+        selectedRow = 0
+        highlightRow()
+        // Keep selected kid card highlighted with the "active" style
+        kidViews.forEachIndexed { i, view ->
             view.setBackgroundResource(
-                if (kidId == id) R.drawable.btn_kid_selected else R.drawable.btn_kid
+                if (view.tag == selectedKidId) R.drawable.btn_kid_active
+                else R.drawable.btn_kid
             )
         }
-        val kid = storage.getKids().find { it.id == id }
-        statusText.text = "${kid?.name ?: "?"}, enter your PIN"
+        val kid = storage.getKids().find { it.id == selectedKidId }
+        statusText.text = "${kid?.emoji} ${kid?.name}, enter your PIN"
+        hintText.text = "\u2B06\uFE0F  \u2B07\uFE0F  choose row  \u00B7  \u2B05\uFE0F  \u23FA  \u27A1\uFE0F  pick number"
+    }
+
+    // ============== HIGHLIGHTS ==============
+    private fun highlightKid(idx: Int) {
+        kidViews.forEachIndexed { i, view ->
+            view.setBackgroundResource(
+                if (i == idx) R.drawable.btn_kid_focused else R.drawable.btn_kid
+            )
+        }
+        // Scroll the focused kid into view
+        val focused = kidViews.getOrNull(idx)
+        focused?.let {
+            kidsContainer.parent?.let { parent ->
+                if (parent is android.widget.ScrollView) {
+                    val y = it.top
+                    parent.smoothScrollTo(0, y - 40)
+                }
+            }
+        }
     }
 
     private fun highlightRow() {
@@ -129,17 +171,33 @@ class LockActivity : AppCompatActivity() {
         }
     }
 
-    private fun pickColumn(col: Int) {
-        if (selectedKidId < 0) {
-            statusText.text = "\u2192 Pick your name first"
+    private fun clearRowHighlight() {
+        rowContainers.forEach { container ->
+            container.setBackgroundResource(R.drawable.row_normal)
+        }
+    }
+
+    // ============== INPUT HANDLERS ==============
+    private fun onKidConfirmed() {
+        val kids = storage.getKids()
+        val kid = kids.getOrNull(selectedKidIndex) ?: return
+        val left = kid.dailyLimitSec - kid.usedSec
+        if (left <= 0) {
+            statusText.text = "\u274C ${kid.name}'s time is up today"
             return
         }
+        selectedKidId = kid.id
+        enterPinMode()
+    }
+
+    private fun pickColumn(col: Int) {
+        if (mode != Mode.PIN) return
         val cell = digitGrid[selectedRow][col]
         when (cell) {
             "\u232B" -> onBackspace()
-            "\u2713" -> {
-                if (pinBuffer.length == 4) checkPin()
-                else statusText.text = "Enter all 4 digits first"
+            "\u21A9" -> {
+                // Return to kid picker
+                enterKidsMode()
             }
             else -> {
                 val digit = cell.toIntOrNull() ?: return
@@ -156,8 +214,10 @@ class LockActivity : AppCompatActivity() {
     }
 
     private fun onBackspace() {
-        if (pinBuffer.isNotEmpty()) pinBuffer.deleteCharAt(pinBuffer.length - 1)
-        updateDots()
+        if (pinBuffer.isNotEmpty()) {
+            pinBuffer.deleteCharAt(pinBuffer.length - 1)
+            updateDots()
+        }
     }
 
     private fun updateDots() {
@@ -177,9 +237,12 @@ class LockActivity : AppCompatActivity() {
                 updateDots()
                 return
             }
+            // SUCCESS: mark active and grant a "grace period" so MonitorService
+            // doesn't immediately re-trigger the lock when the blocked app
+            // launches in the next instant.
             storage.setActiveKid(kid.id)
+            storage.setLockGraceUntil(System.currentTimeMillis() + 8_000L)
             Toast.makeText(this, "Welcome ${kid.emoji} ${kid.name}!", Toast.LENGTH_SHORT).show()
-            finish()
             blockedPackage?.let {
                 if (it != "test") {
                     val launch = packageManager.getLaunchIntentForPackage(it)
@@ -189,6 +252,7 @@ class LockActivity : AppCompatActivity() {
                     }
                 }
             }
+            finish()
         } else {
             statusText.text = "\u274C Wrong PIN, try again"
             pinBuffer.clear()
@@ -208,37 +272,62 @@ class LockActivity : AppCompatActivity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        goHome()
+        if (mode == Mode.PIN) {
+            // Back returns to kid picker instead of leaving the screen
+            enterKidsMode()
+        } else {
+            goHome()
+        }
     }
 
+    // ============== D-PAD HANDLING ==============
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        return when (mode) {
+            Mode.KIDS -> handleKidsModeKey(keyCode)
+            Mode.PIN -> handlePinModeKey(keyCode)
+        }
+    }
+
+    private fun handleKidsModeKey(keyCode: Int): Boolean {
         when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP -> {
-                if (selectedKidId >= 0) {
-                    selectedRow = (selectedRow - 1 + rowContainers.size) % rowContainers.size
-                    highlightRow()
-                    return true
-                }
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_LEFT -> {
+                if (kidViews.isEmpty()) return true
+                selectedKidIndex = (selectedKidIndex - 1 + kidViews.size) % kidViews.size
+                highlightKid(selectedKidIndex)
+                return true
             }
-            KeyEvent.KEYCODE_DPAD_DOWN -> {
-                if (selectedKidId >= 0) {
-                    selectedRow = (selectedRow + 1) % rowContainers.size
-                    highlightRow()
-                    return true
-                }
-            }
-            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                if (selectedKidId >= 0) { pickColumn(0); return true }
+            KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (kidViews.isEmpty()) return true
+                selectedKidIndex = (selectedKidIndex + 1) % kidViews.size
+                highlightKid(selectedKidIndex)
+                return true
             }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                if (selectedKidId >= 0) { pickColumn(1); return true }
+                onKidConfirmed()
+                return true
             }
-            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                if (selectedKidId >= 0) { pickColumn(2); return true }
+        }
+        return false
+    }
+
+    private fun handlePinModeKey(keyCode: Int): Boolean {
+        when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                selectedRow = (selectedRow - 1 + rowContainers.size) % rowContainers.size
+                highlightRow()
+                return true
             }
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                selectedRow = (selectedRow + 1) % rowContainers.size
+                highlightRow()
+                return true
+            }
+            KeyEvent.KEYCODE_DPAD_LEFT -> { pickColumn(0); return true }
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> { pickColumn(1); return true }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> { pickColumn(2); return true }
             KeyEvent.KEYCODE_DEL -> { onBackspace(); return true }
         }
-        return super.onKeyDown(keyCode, event)
+        return false
     }
 
     private fun formatTime(sec: Long): String {
