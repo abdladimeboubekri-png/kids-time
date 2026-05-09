@@ -11,18 +11,15 @@ import android.util.Log
 /**
  * Wakeup receiver fired by AlarmManager when a kid's time should run out.
  *
- * This is the KEY mechanism for forcing the lock to appear mid-video:
- * Even when YouTube is fullscreen and the OS has suspended our 1-second
- * tick service, AlarmManager.setExactAndAllowWhileIdle() will still fire
- * this receiver because it has wake-permission privileges (same as alarm
- * clock apps).
+ * Critical: this fires even when our service has been suspended by Android.
+ * That makes it the ONE reliable way to enforce time limits during YouTube
+ * fullscreen playback.
  */
 class TimeUpReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         Log.d(TAG, "TimeUpReceiver fired!")
 
-        // Acquire a wake lock so the device doesn't sleep before we're done
         val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         @Suppress("DEPRECATION")
         val wl = pm.newWakeLock(
@@ -39,7 +36,6 @@ class TimeUpReceiver : BroadcastReceiver() {
                 return
             }
 
-            // Recompute used time using authoritative UsageStatsManager data
             val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
             val sessionStart = storage.getSessionStartMs()
             if (sessionStart > 0) {
@@ -54,8 +50,8 @@ class TimeUpReceiver : BroadcastReceiver() {
                 return
             }
 
-            // Find current foreground app
-            val fg = getForegroundApp(usm) ?: ""
+            // Use the robust detection
+            val fg = getForegroundAppRobust(usm) ?: ""
             val blocked = storage.getBlockedPackages()
 
             Log.d(TAG, "Kid ${kid.name}: used=${kid.usedSec}/${kid.dailyLimitSec}, fg=$fg, isBlocked=${blocked.contains(fg)}")
@@ -67,12 +63,12 @@ class TimeUpReceiver : BroadcastReceiver() {
                 storage.setSessionStartUsedSec(0L)
                 storage.setLockGraceUntil(0L)
 
-                // Only force lock if currently in a blocked app
-                if (blocked.contains(fg)) {
+                // Force lock if currently in a blocked app OR even if we don't know
+                // (better to show lock unnecessarily than to miss when we should)
+                if (blocked.contains(fg) || fg.isEmpty()) {
                     showLockNow(context, fg)
                 }
             } else {
-                // Time NOT yet up — reschedule the alarm for the new estimated time
                 val remaining = kid.dailyLimitSec - kid.usedSec
                 Log.d(TAG, "Time not up yet, ${remaining}s remaining. Rescheduling.")
                 AlarmScheduler.scheduleTimeUp(context, remaining)
@@ -85,7 +81,6 @@ class TimeUpReceiver : BroadcastReceiver() {
     private fun showLockNow(context: Context, blockedPackage: String) {
         Log.d(TAG, "showLockNow: blocked=$blockedPackage")
 
-        // Step 1: send HOME to break out of YouTube's foreground hold
         try {
             val home = Intent(Intent.ACTION_MAIN).apply {
                 addCategory(Intent.CATEGORY_HOME)
@@ -97,7 +92,6 @@ class TimeUpReceiver : BroadcastReceiver() {
             Log.e(TAG, "HOME failed", e)
         }
 
-        // Step 2: launch lock activity (slight delay so HOME transition starts)
         val handler = android.os.Handler(android.os.Looper.getMainLooper())
         handler.postDelayed({
             try {
@@ -119,20 +113,53 @@ class TimeUpReceiver : BroadcastReceiver() {
         }, 400L)
     }
 
-    private fun getForegroundApp(usm: UsageStatsManager): String? {
-        val end = System.currentTimeMillis()
-        val start = end - 10_000
-        val events = usm.queryEvents(start, end)
-        val event = UsageEvents.Event()
-        var lastPackage: String? = null
-        while (events.hasNextEvent()) {
-            events.getNextEvent(event)
-            if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND ||
-                event.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
-                lastPackage = event.packageName
+    /**
+     * Robust foreground app detection — same logic as MonitorService.
+     */
+    private fun getForegroundAppRobust(usm: UsageStatsManager): String? {
+        val now = System.currentTimeMillis()
+
+        // Method 1: queryUsageStats with lastTimeUsed
+        try {
+            val stats = usm.queryUsageStats(
+                UsageStatsManager.INTERVAL_BEST,
+                now - 60 * 60 * 1000L,
+                now
+            )
+            if (stats != null && stats.isNotEmpty()) {
+                val mostRecent = stats
+                    .filter { it.lastTimeUsed > 0 && it.packageName.isNotBlank() }
+                    .maxByOrNull { it.lastTimeUsed }
+                if (mostRecent != null && (now - mostRecent.lastTimeUsed) < 60_000L) {
+                    return mostRecent.packageName
+                }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "queryUsageStats failed", e)
         }
-        return lastPackage
+
+        // Method 2: walk wide event window
+        try {
+            val events = usm.queryEvents(now - 60 * 60 * 1000L, now)
+            val event = UsageEvents.Event()
+            var lastForegrounded: String? = null
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND ||
+                    event.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
+                    lastForegrounded = event.packageName
+                } else if ((event.eventType == UsageEvents.Event.MOVE_TO_BACKGROUND ||
+                            event.eventType == UsageEvents.Event.ACTIVITY_PAUSED ||
+                            event.eventType == UsageEvents.Event.ACTIVITY_STOPPED) &&
+                           event.packageName == lastForegrounded) {
+                    lastForegrounded = null
+                }
+            }
+            return lastForegrounded
+        } catch (e: Exception) {
+            Log.e(TAG, "queryEvents wide failed", e)
+        }
+        return null
     }
 
     private fun secondsInBlockedAppsSince(
@@ -143,13 +170,12 @@ class TimeUpReceiver : BroadcastReceiver() {
     ): Long {
         if (end <= start) return 0L
         val blocked = storage.getBlockedPackages()
-        val events = usm.queryEvents(start - 60_000L, end + 1000L)
+        val events = usm.queryEvents(start - 60_000L, end + 5000L)
         val event = UsageEvents.Event()
         var totalMs = 0L
         var currentBlockedStart: Long = -1L
 
-        // Detect what was foregrounded at session start
-        val priorEvents = usm.queryEvents(start - 60_000L, start + 1)
+        val priorEvents = usm.queryEvents(start - 60 * 60 * 1000L, start + 1)
         val priorEvent = UsageEvents.Event()
         var priorPackage: String? = null
         while (priorEvents.hasNextEvent()) {
