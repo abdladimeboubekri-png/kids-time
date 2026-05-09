@@ -4,9 +4,10 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="#0d0f1a"
-    android:padding="32dp">
+    android:padding="32dp"
+    android:focusable="true"
+    android:focusableInTouchMode="true">
 
-    <!-- Top header strip -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -43,7 +44,6 @@
         android:textStyle="bold"
         android:layout_marginBottom="12dp"/>
 
-    <!-- Main content: 2 columns -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -59,7 +59,6 @@
             android:orientation="vertical"
             android:gravity="center">
 
-            <!-- Row 0: 1 2 3 -->
             <LinearLayout
                 android:id="@+id/row0"
                 android:layout_width="wrap_content"
@@ -82,7 +81,6 @@
                     android:background="@drawable/cell_normal"/>
             </LinearLayout>
 
-            <!-- Row 1: 4 5 6 -->
             <LinearLayout
                 android:id="@+id/row1"
                 android:layout_width="wrap_content"
@@ -105,7 +103,6 @@
                     android:background="@drawable/cell_normal"/>
             </LinearLayout>
 
-            <!-- Row 2: 7 8 9 -->
             <LinearLayout
                 android:id="@+id/row2"
                 android:layout_width="wrap_content"
@@ -128,7 +125,6 @@
                     android:background="@drawable/cell_normal"/>
             </LinearLayout>
 
-            <!-- Row 3: DEL 0 BACK -->
             <LinearLayout
                 android:id="@+id/row3"
                 android:layout_width="wrap_content"
@@ -152,7 +148,6 @@
 
         </LinearLayout>
 
-        <!-- Vertical divider -->
         <View
             android:layout_width="1dp"
             android:layout_height="match_parent"
@@ -178,10 +173,13 @@
                 android:layout_marginBottom="12dp"/>
 
             <ScrollView
+                android:id="@+id/kidsScrollView"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
-                android:scrollbars="none">
+                android:scrollbars="none"
+                android:descendantFocusability="blocksDescendants"
+                android:focusable="false">
 
                 <LinearLayout
                     android:id="@+id/kidsContainer"
@@ -192,7 +190,6 @@
                     android:paddingHorizontal="16dp"/>
             </ScrollView>
 
-            <!-- PIN dots -->
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
