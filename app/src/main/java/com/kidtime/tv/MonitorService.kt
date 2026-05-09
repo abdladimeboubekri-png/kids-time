@@ -18,11 +18,37 @@ class MonitorService : Service() {
     private lateinit var usageStatsManager: UsageStatsManager
     private val handler = Handler(Looper.getMainLooper())
     private var lastForegroundPackage: String? = null
-    private var lastKnownForeground: String? = null  // sticky cache
+    private var lastKnownForeground: String? = null
     private var lockShowing: Boolean = false
     private var lastLockShownAt: Long = 0L
     private var tickCount: Long = 0L
     private var lastEvent: String = ""
+
+    /**
+     * TRANSIENT system overlays that flash briefly during normal app use
+     * — they're not the user actually navigating somewhere.
+     *
+     * On Android TV, when watching a YouTube video, the OS flashes
+     * `tvrecommendations` for milliseconds to render "next video" overlays.
+     * The user has NOT left YouTube — it's a system UI artifact.
+     *
+     * These should be IGNORED:
+     *   - Don't count time
+     *   - Don't kick out kid
+     *   - Don't reset anything
+     *   - Pretend they didn't happen
+     *
+     * Importantly, this list does NOT include the home launcher
+     * (com.google.android.tvlauncher). Going to home is a real user action
+     * that should end the session.
+     */
+    private val transientOverlayPackages = setOf(
+        "com.google.android.tvrecommendations",
+        "com.google.android.tvrecommendation",
+        "com.android.systemui",
+        "android",
+        "com.google.android.gms"
+    )
 
     private val tickRunnable = object : Runnable {
         override fun run() {
@@ -53,23 +79,21 @@ class MonitorService : Service() {
     private fun tick() {
         tickCount++
         val now = System.currentTimeMillis()
-
-        // ROBUST foreground detection (see method comments)
         val fg = getForegroundAppRobust()
         val isOurApp = (fg == packageName)
         val blocked = storage.getBlockedPackages()
         val isBlocked = fg != null && blocked.contains(fg)
-        val appChanged = (lastForegroundPackage != null && lastForegroundPackage != fg)
+        val isTransientOverlay = fg != null && transientOverlayPackages.contains(fg)
         val activeKid = storage.getActiveKid()
         val inGracePeriod = now < storage.getLockGraceUntil()
 
-        // Update overlay every tick
+        // Update overlay every tick — show what we're seeing
         val kid = if (activeKid >= 0) storage.getKids().find { it.id == activeKid } else null
         val left = if (kid != null) (kid.dailyLimitSec - kid.usedSec).coerceAtLeast(0) else 0L
         val state = buildString {
             append("T#$tickCount  ")
             append("fg=${fg?.takeLast(22) ?: "?"}  ")
-            append("blk=${if (isBlocked) "Y" else "N"}  ")
+            append("blk=${if (isBlocked) "Y" else if (isTransientOverlay) "ovr" else "N"}  ")
             if (kid != null) {
                 append("${kid.name} ${formatTime(left)} left  ")
             } else {
@@ -87,8 +111,21 @@ class MonitorService : Service() {
             return
         }
 
+        // ===== TRANSIENT OVERLAY: completely ignore =====
+        // These are millisecond flashes during normal video playback.
+        // We do NOT update lastForegroundPackage so our anchor stays on
+        // whatever real app the user was using.
+        // We do NOT update used time (that gets recomputed from UsageStats
+        // anyway when we next see the real app).
+        // We do NOT kick out the kid.
+        if (isTransientOverlay) {
+            // Skip this tick entirely — pretend we never saw it
+            return
+        }
+
+        // ===== BLOCKED APP =====
         if (isBlocked) {
-            // Always check time first
+            // Always check time first (covers grace-period kids too)
             if (activeKid >= 0) {
                 updateUsedTimeFromSession(activeKid)
                 val k = storage.getKids().find { it.id == activeKid }
@@ -109,7 +146,11 @@ class MonitorService : Service() {
                 return
             }
 
-            if (activeKid < 0 || appChanged) {
+            // App really changed (compared to our anchor, which skipped overlays)
+            // OR no kid logged in: prompt for PIN
+            val realAppChange = lastForegroundPackage != null &&
+                                lastForegroundPackage != fg
+            if (activeKid < 0 || realAppChange) {
                 if (activeKid >= 0) updateUsedTimeFromSession(activeKid)
                 storage.setActiveKid(-1)
                 clearSession()
@@ -123,40 +164,28 @@ class MonitorService : Service() {
             return
         }
 
+        // ===== ANYTHING ELSE (home screen, allowed apps, settings) =====
+        // The kid genuinely left the blocked app — log them out.
+        // Going to home/launcher MUST end the session so re-entering the
+        // blocked app requires a fresh PIN (so a different kid can take over).
         if (!inGracePeriod && activeKid >= 0) {
             updateUsedTimeFromSession(activeKid)
             storage.setActiveKid(-1)
             clearSession()
             lastEvent = "left blocked app"
+            // Cancel pending alarm since the session is over
+            AlarmScheduler.cancel(this)
         }
         lastForegroundPackage = fg
     }
 
-    /**
-     * Robust foreground app detection.
-     *
-     * THE BUG IT FIXES: queryEvents() only returns events that occurred in the
-     * given time window. When YouTube has been in the foreground for a while
-     * with no app switches, no new events are emitted — so the function returns
-     * null even though YouTube is clearly still on screen.
-     *
-     * THE FIX: layered approach
-     *   1. Try queryUsageStats() to find the package with the most recent
-     *      lastTimeUsed > a few seconds ago — this is the authoritative
-     *      "current foreground" lookup.
-     *   2. If that fails, walk events from a much wider window (1 hour back)
-     *      and find the most recent foreground event that wasn't followed by
-     *      a backgrounding.
-     *   3. Final fallback: return our cached lastKnownForeground.
-     */
     private fun getForegroundAppRobust(): String? {
         val now = System.currentTimeMillis()
 
-        // Method 1: queryUsageStats — gives us aggregated stats with lastTimeUsed
         try {
             val stats = usageStatsManager.queryUsageStats(
                 UsageStatsManager.INTERVAL_BEST,
-                now - 60 * 60 * 1000L,  // last hour
+                now - 60 * 60 * 1000L,
                 now
             )
             if (stats != null && stats.isNotEmpty()) {
@@ -172,7 +201,6 @@ class MonitorService : Service() {
             Log.e(TAG, "queryUsageStats failed", e)
         }
 
-        // Method 2: walk a wide event window
         try {
             val events = usageStatsManager.queryEvents(now - 60 * 60 * 1000L, now)
             val event = UsageEvents.Event()
@@ -197,7 +225,6 @@ class MonitorService : Service() {
             Log.e(TAG, "queryEvents wide failed", e)
         }
 
-        // Method 3: cached value
         return lastKnownForeground
     }
 
@@ -226,27 +253,28 @@ class MonitorService : Service() {
     }
 
     /**
-     * Walk the event stream and accumulate time spent in blocked apps.
+     * Sum time the kid spent in blocked apps since session start.
      *
-     * KEY FIX: extended the query window to be larger, AND if we never see
-     * a "background" event for the foregrounded app, we treat it as still
-     * foregrounded all the way to [end].
+     * KEY: transient overlay events are SKIPPED entirely so they don't
+     * artificially close intervals. Time spent during overlay flashes
+     * is naturally rolled into the surrounding blocked-app time.
      */
     private fun secondsInBlockedAppsSince(start: Long, end: Long): Long {
         if (end <= start) return 0L
         val blocked = storage.getBlockedPackages()
-        // Wide query window so we capture all relevant events
         val events = usageStatsManager.queryEvents(start - 60_000L, end + 5000L)
         val event = UsageEvents.Event()
         var totalMs = 0L
         var currentBlockedStart: Long = -1L
 
-        // Detect what was foregrounded at session start
+        // What was foregrounded at session start?
         val priorEvents = usageStatsManager.queryEvents(start - 60 * 60 * 1000L, start + 1)
         val priorEvent = UsageEvents.Event()
         var priorPackage: String? = null
         while (priorEvents.hasNextEvent()) {
             priorEvents.getNextEvent(priorEvent)
+            // Skip overlay events when looking for what was REALLY foregrounded
+            if (transientOverlayPackages.contains(priorEvent.packageName)) continue
             if (priorEvent.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND ||
                 priorEvent.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
                 priorPackage = priorEvent.packageName
@@ -269,11 +297,16 @@ class MonitorService : Service() {
             val pkg = event.packageName
             val type = event.eventType
 
+            // Skip transient overlay events entirely — they don't count as
+            // either entering or exiting the blocked app.
+            if (transientOverlayPackages.contains(pkg)) continue
+
             if (type == UsageEvents.Event.MOVE_TO_FOREGROUND ||
                 type == UsageEvents.Event.ACTIVITY_RESUMED) {
                 if (blocked.contains(pkg)) {
                     if (currentBlockedStart < 0) currentBlockedStart = ts
                 } else {
+                    // Real non-blocked app foregrounded -> close interval
                     if (currentBlockedStart >= 0) {
                         totalMs += (ts - currentBlockedStart)
                         currentBlockedStart = -1
@@ -289,7 +322,6 @@ class MonitorService : Service() {
             }
         }
 
-        // If a blocked app is still foregrounded at [end], close interval to end
         if (currentBlockedStart >= 0) {
             totalMs += (end - currentBlockedStart)
         }
@@ -311,7 +343,6 @@ class MonitorService : Service() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(home)
-            Log.d(TAG, "HOME sent")
             lastEvent = "HOME sent OK"
         } catch (e: Exception) {
             Log.e(TAG, "HOME failed", e)
