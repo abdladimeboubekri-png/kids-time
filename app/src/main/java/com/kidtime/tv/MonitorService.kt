@@ -62,8 +62,10 @@ class MonitorService : Service() {
         storage = Storage(this)
         usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         startForeground(NOTIF_ID, buildNotification("starting"))
-        DebugOverlay.attach(this)
-        DebugOverlay.update("KidTime: started")
+        if (storage.isDebugOverlayEnabled()) {
+            DebugOverlay.attach(this)
+            DebugOverlay.update("KidTime: started")
+        }
         handler.post(tickRunnable)
     }
 
@@ -87,21 +89,28 @@ class MonitorService : Service() {
         val activeKid = storage.getActiveKid()
         val inGracePeriod = now < storage.getLockGraceUntil()
 
-        // Update overlay every tick — show what we're seeing
-        val kid = if (activeKid >= 0) storage.getKids().find { it.id == activeKid } else null
-        val left = if (kid != null) (kid.dailyLimitSec - kid.usedSec).coerceAtLeast(0) else 0L
-        val state = buildString {
-            append("T#$tickCount  ")
-            append("fg=${fg?.takeLast(22) ?: "?"}  ")
-            append("blk=${if (isBlocked) "Y" else if (isTransientOverlay) "ovr" else "N"}  ")
-            if (kid != null) {
-                append("${kid.name} ${formatTime(left)} left  ")
-            } else {
-                append("noKid  ")
+        // Dynamically attach/detach overlay based on current setting
+        val debugEnabled = storage.isDebugOverlayEnabled()
+        if (debugEnabled) {
+            // Update overlay every tick — show what we're seeing
+            val kid = if (activeKid >= 0) storage.getKids().find { it.id == activeKid } else null
+            val left = if (kid != null) (kid.dailyLimitSec - kid.usedSec).coerceAtLeast(0) else 0L
+            val state = buildString {
+                append("T#$tickCount  ")
+                append("fg=${fg?.takeLast(22) ?: "?"}  ")
+                append("blk=${if (isBlocked) "Y" else if (isTransientOverlay) "ovr" else "N"}  ")
+                if (kid != null) {
+                    append("${kid.name} ${formatTime(left)} left  ")
+                } else {
+                    append("noKid  ")
+                }
+                if (lastEvent.isNotEmpty()) append("\n• $lastEvent")
             }
-            if (lastEvent.isNotEmpty()) append("\n• $lastEvent")
+            DebugOverlay.attach(this)  // no-op if already attached
+            DebugOverlay.update(state)
+        } else {
+            DebugOverlay.detach()  // no-op if already detached
         }
-        DebugOverlay.update(state)
 
         if (fg == null) return
 
