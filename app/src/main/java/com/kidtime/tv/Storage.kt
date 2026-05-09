@@ -12,7 +12,7 @@ data class Kid(
     var emoji: String,
     var pin: String,
     var usedSec: Long,
-    var dailyLimitSec: Long  // Per-kid time limit (NEW)
+    var dailyLimitSec: Long
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id); put("name", name); put("emoji", emoji)
@@ -26,7 +26,6 @@ data class Kid(
             j.getString("emoji"),
             j.getString("pin"),
             j.getLong("usedSec"),
-            // Backward compat: if no per-kid limit, default to 3 hours
             if (j.has("dailyLimitSec")) j.getLong("dailyLimitSec") else 3 * 3600L
         )
     }
@@ -36,7 +35,6 @@ class Storage(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("kidtime_prefs", Context.MODE_PRIVATE)
 
-    // ========== KIDS ==========
     fun getKids(): MutableList<Kid> {
         resetIfNewDay()
         val raw = prefs.getString("kids", null)
@@ -82,16 +80,12 @@ class Storage(context: Context) {
         }
     }
 
-    // ========== TIME LIMITS ==========
-    // Default daily limit (used when adding a new kid)
     fun getDefaultDailyLimitSec(): Long = prefs.getLong("default_daily_limit_sec", 3 * 3600L)
     fun setDefaultDailyLimitSec(s: Long) = prefs.edit().putLong("default_daily_limit_sec", s).apply()
 
-    // ========== ADMIN ==========
     fun getAdminPin(): String = prefs.getString("admin_pin", "1234") ?: "1234"
     fun setAdminPin(pin: String) = prefs.edit().putString("admin_pin", pin).apply()
 
-    // ========== BLOCKED APPS ==========
     fun getBlockedPackages(): MutableSet<String> {
         val saved = prefs.getStringSet("blocked_packages", null)
         if (saved == null) {
@@ -115,11 +109,16 @@ class Storage(context: Context) {
     fun setBlockedPackages(s: Set<String>) =
         prefs.edit().putStringSet("blocked_packages", s).apply()
 
-    // ========== ACTIVE SESSION ==========
     fun getActiveKid(): Int = prefs.getInt("active_kid", -1)
     fun setActiveKid(id: Int) = prefs.edit().putInt("active_kid", id).apply()
 
-    // ========== DAILY RESET ==========
+    // Grace period: a timestamp in millis until which the monitor service will
+    // NOT treat an app switch as needing a fresh PIN. Used right after a kid
+    // successfully enters their PIN, so the launch of the blocked app doesn't
+    // immediately re-trigger the lock.
+    fun getLockGraceUntil(): Long = prefs.getLong("lock_grace_until", 0L)
+    fun setLockGraceUntil(ts: Long) = prefs.edit().putLong("lock_grace_until", ts).apply()
+
     private fun resetIfNewDay() {
         val cal = Calendar.getInstance()
         val today = cal.get(Calendar.YEAR) * 1000 + cal.get(Calendar.DAY_OF_YEAR)
