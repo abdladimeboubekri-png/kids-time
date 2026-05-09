@@ -1,6 +1,5 @@
 package com.kidtime.tv
 
-import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
@@ -9,7 +8,6 @@ import android.view.KeyEvent
 import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 
 class LockActivity : AppCompatActivity() {
 
@@ -18,6 +16,19 @@ class LockActivity : AppCompatActivity() {
     private lateinit var kidButtons: List<Button>
     private lateinit var statusText: TextView
     private lateinit var titleText: TextView
+
+    private lateinit var rowContainers: List<LinearLayout>
+    private lateinit var rowDigits: List<List<TextView>>
+
+    // Row 0=[1,2,3], Row 1=[4,5,6], Row 2=[7,8,9], Row 3=[DEL,0,OK]
+    private val digitGrid = listOf(
+        listOf("1", "2", "3"),
+        listOf("4", "5", "6"),
+        listOf("7", "8", "9"),
+        listOf("\u232B", "0", "\u2713")
+    )
+
+    private var selectedRow: Int = 0
     private var pinBuffer = StringBuilder()
     private var selectedKidId: Int = -1
     private var blockedPackage: String? = null
@@ -38,12 +49,64 @@ class LockActivity : AppCompatActivity() {
             findViewById(R.id.kid1), findViewById(R.id.kid2), findViewById(R.id.kid3)
         )
 
-        renderKids()
-        setupNumpad()
+        rowContainers = listOf(
+            findViewById(R.id.row0),
+            findViewById(R.id.row1),
+            findViewById(R.id.row2),
+            findViewById(R.id.row3)
+        )
+        rowDigits = listOf(
+            listOf(findViewById(R.id.r0c0), findViewById(R.id.r0c1), findViewById(R.id.r0c2)),
+            listOf(findViewById(R.id.r1c0), findViewById(R.id.r1c1), findViewById(R.id.r1c2)),
+            listOf(findViewById(R.id.r2c0), findViewById(R.id.r2c1), findViewById(R.id.r2c2)),
+            listOf(findViewById(R.id.r3c0), findViewById(R.id.r3c1), findViewById(R.id.r3c2))
+        )
 
-        // Make this fullscreen and on top
+        rowDigits.forEachIndexed { ri, row ->
+            row.forEachIndexed { ci, tv ->
+                tv.text = digitGrid[ri][ci]
+                tv.setOnClickListener {
+                    selectedRow = ri
+                    highlightRow()
+                    pickColumn(ci)
+                }
+            }
+        }
+
+        renderKids()
+        highlightRow()
+
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
             View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+
+        statusText.text = "Pick your name"
+    }
+
+    private fun highlightRow() {
+        rowContainers.forEachIndexed { i, container ->
+            container.setBackgroundResource(
+                if (i == selectedRow) R.drawable.row_selected else R.drawable.row_normal
+            )
+        }
+    }
+
+    private fun pickColumn(col: Int) {
+        if (selectedKidId < 0) {
+            statusText.text = "\u2B06\uFE0F Pick your name first"
+            return
+        }
+        val cell = digitGrid[selectedRow][col]
+        when (cell) {
+            "\u232B" -> onBackspace()
+            "\u2713" -> {
+                if (pinBuffer.length == 4) checkPin()
+                else statusText.text = "Enter all 4 digits first"
+            }
+            else -> {
+                val digit = cell.toIntOrNull() ?: return
+                onDigit(digit)
+            }
+        }
     }
 
     private fun renderKids() {
@@ -71,25 +134,11 @@ class LockActivity : AppCompatActivity() {
         }
     }
 
-    private fun setupNumpad() {
-        val ids = listOf(R.id.n0, R.id.n1, R.id.n2, R.id.n3, R.id.n4,
-            R.id.n5, R.id.n6, R.id.n7, R.id.n8, R.id.n9)
-        ids.forEachIndexed { num, id ->
-            findViewById<Button>(id).setOnClickListener { onDigit(num) }
-        }
-        findViewById<Button>(R.id.del).setOnClickListener { onBackspace() }
-        findViewById<Button>(R.id.exit).setOnClickListener { goHome() }
-    }
-
     private fun onDigit(d: Int) {
-        if (selectedKidId < 0) {
-            statusText.text = "⬆️ Pick your name first"
-            return
-        }
         if (pinBuffer.length >= 4) return
         pinBuffer.append(d)
         updateDots()
-        if (pinBuffer.length == 4) Handler(Looper.getMainLooper()).postDelayed({ checkPin() }, 200)
+        if (pinBuffer.length == 4) Handler(Looper.getMainLooper()).postDelayed({ checkPin() }, 250)
     }
 
     private fun onBackspace() {
@@ -99,7 +148,7 @@ class LockActivity : AppCompatActivity() {
 
     private fun updateDots() {
         pinDots.forEachIndexed { i, dot ->
-            dot.text = if (i < pinBuffer.length) "●" else "○"
+            dot.text = if (i < pinBuffer.length) "\u25CF" else "\u25CB"
         }
     }
 
@@ -109,30 +158,32 @@ class LockActivity : AppCompatActivity() {
         if (pinBuffer.toString() == kid.pin) {
             val left = storage.getDailyLimitSec() - kid.usedSec
             if (left <= 0) {
-                statusText.text = "❌ ${kid.name}'s time is up today"
-                pinBuffer.clear(); updateDots()
+                statusText.text = "\u274C ${kid.name}'s time is up today"
+                pinBuffer.clear()
+                updateDots()
                 return
             }
-            // Mark this kid active and let them through
             storage.setActiveKid(kid.id)
             Toast.makeText(this, "Welcome ${kid.emoji} ${kid.name}!", Toast.LENGTH_SHORT).show()
             finish()
-            // Let user back to the blocked app -- bring it to foreground
             blockedPackage?.let {
-                val launch = packageManager.getLaunchIntentForPackage(it)
-                if (launch != null) {
-                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    startActivity(launch)
+                if (it != "test") {
+                    val launch = packageManager.getLaunchIntentForPackage(it)
+                    if (launch != null) {
+                        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        startActivity(launch)
+                    }
                 }
             }
         } else {
-            statusText.text = "❌ Wrong PIN, try again"
-            pinBuffer.clear(); updateDots()
+            statusText.text = "\u274C Wrong PIN, try again"
+            pinBuffer.clear()
+            updateDots()
         }
     }
 
     private fun goHome() {
-        // Kid pressed exit -> go to launcher
+        storage.setActiveKid(-1)
         val home = Intent(Intent.ACTION_MAIN).apply {
             addCategory(Intent.CATEGORY_HOME)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -141,19 +192,38 @@ class LockActivity : AppCompatActivity() {
         finish()
     }
 
-    // Block back button - kids must pick a kid + enter PIN, or hit exit
+    @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        // Just go home instead of dismissing
         goHome()
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // Map remote control numeric keys
-        if (keyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9) {
-            onDigit(keyCode - KeyEvent.KEYCODE_0)
-            return true
+        when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                if (selectedKidId >= 0) {
+                    selectedRow = (selectedRow - 1 + rowContainers.size) % rowContainers.size
+                    highlightRow()
+                    return true
+                }
+            }
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                if (selectedKidId >= 0) {
+                    selectedRow = (selectedRow + 1) % rowContainers.size
+                    highlightRow()
+                    return true
+                }
+            }
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                if (selectedKidId >= 0) { pickColumn(0); return true }
+            }
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                if (selectedKidId >= 0) { pickColumn(1); return true }
+            }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (selectedKidId >= 0) { pickColumn(2); return true }
+            }
+            KeyEvent.KEYCODE_DEL -> { onBackspace(); return true }
         }
-        if (keyCode == KeyEvent.KEYCODE_DEL) { onBackspace(); return true }
         return super.onKeyDown(keyCode, event)
     }
 
