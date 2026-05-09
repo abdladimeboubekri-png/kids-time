@@ -108,7 +108,32 @@
 
         <Button android:id="@+id/btnTest"
             android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Test Lock Screen"/>
+            android:text="Test Lock Screen"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="DEBUG"
+            android:textColor="#7a82a8"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.15"
+            android:layout_marginTop="28dp"
+            android:layout_marginBottom="8dp"/>
+
+        <Button android:id="@+id/btnToggleDebug"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="🐞 Debug overlay: ON"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="The debug overlay shows live status (T#, fg=, time left) on top of every screen. Helps diagnose issues but you'll want it OFF for daily use."
+            android:textColor="#7a82a8"
+            android:textSize="12sp"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="16dp"/>
 
     </LinearLayout>
 </ScrollView>
